@@ -8,14 +8,15 @@ import { rowRoutes } from "./routes/rows.ts";
 
 const app = new Hono<{ Bindings: Env }>();
 
-// CORS — allow configured origins
+// CORS — allow any subdomain of apicode.my.id
 app.use(
   "*",
   cors({
-    origin: (origin, c) => {
-      const allowed = (c.env.ALLOWED_ORIGINS ?? "").split(",").map((o: string) => o.trim());
-      if (allowed.includes(origin)) return origin;
-      return allowed[0] ?? origin;
+    origin: (origin) => {
+      if (origin && (origin.endsWith(".apicode.my.id") || origin === "https://apicode.my.id")) {
+        return origin;
+      }
+      return null;
     },
     credentials: true,
   })
