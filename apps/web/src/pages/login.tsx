@@ -1,3 +1,5 @@
+const API_URL = (import.meta.env["VITE_API_URL"] as string | undefined) ?? "";
+
 export function LoginPage() {
   return (
     <div className="flex min-h-screen flex-col items-center justify-center bg-gray-50">
@@ -8,7 +10,7 @@ export function LoginPage() {
         </div>
 
         <a
-          href="/auth/github"
+          href={`${API_URL}/auth/github`}
           className="flex w-full items-center justify-center gap-3 rounded-lg bg-gray-900 px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-gray-700"
         >
           <svg className="h-5 w-5" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true">

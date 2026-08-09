@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
 
+const API_URL = (import.meta.env["VITE_API_URL"] as string | undefined) ?? "";
+
 interface AuthUser {
   id: string;
   username: string;
@@ -16,7 +18,7 @@ export function useAuth(): UseAuthResult {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetch("/auth/me", { credentials: "include" })
+    fetch(`${API_URL}/auth/me`, { credentials: "include" })
       .then((res) => res.json())
       .then((data: { user: AuthUser | null }) => {
         setUser(data.user);
