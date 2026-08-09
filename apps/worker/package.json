@@ -4,30 +4,30 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "wrangler dev",
-    "deploy": "wrangler deploy",
-    "deploy:preview": "wrangler deploy --env preview",
+    "dev": "wrangler dev --config wrangler.jsonc",
+    "deploy": "wrangler deploy --config wrangler.jsonc",
+    "deploy:preview": "wrangler deploy --config wrangler.jsonc --env preview",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
-    "db:generate": "drizzle-kit generate",
-    "db:migrate:local": "wrangler d1 migrations apply acostator-db --local",
-    "db:migrate:remote": "wrangler d1 migrations apply acostator-db --remote",
+    "db:generate": "cd ../.. && node_modules/.bin/drizzle-kit generate --config=apps/worker/drizzle.config.ts",
+    "db:migrate:local": "wrangler d1 migrations apply acostator --local --config wrangler.jsonc",
+    "db:migrate:remote": "wrangler d1 migrations apply acostator --remote --config wrangler.jsonc",
     "db:studio": "drizzle-kit studio"
   },
   "dependencies": {
     "@acostator/shared": "*",
-    "hono": "4.6.14",
+    "@hono/zod-validator": "0.4.1",
     "drizzle-orm": "0.36.4",
-    "zod": "3.23.8",
-    "@hono/zod-validator": "0.4.1"
+    "hono": "4.6.14",
+    "zod": "3.23.8"
   },
   "devDependencies": {
-    "typescript": "5.6.3",
-    "wrangler": "3.99.0",
-    "drizzle-kit": "0.28.1",
-    "@cloudflare/workers-types": "4.20241218.0",
     "@cloudflare/vitest-pool-workers": "0.5.37",
-    "vitest": "2.1.8"
+    "@cloudflare/workers-types": "4.20241218.0",
+    "drizzle-kit": "^0.29.1",
+    "typescript": "5.6.3",
+    "vitest": "2.1.8",
+    "wrangler": "^4.120.0"
   }
 }
