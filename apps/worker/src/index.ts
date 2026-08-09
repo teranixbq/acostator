@@ -8,13 +8,14 @@ import { rowRoutes } from "./routes/rows.ts";
 
 const app = new Hono<{ Bindings: Env }>();
 
-// CORS — allow SPA origin in dev; tighten in production via env
+// CORS — allow configured origins
 app.use(
   "*",
   cors({
     origin: (origin, c) => {
-      if (c.env.ENVIRONMENT === "development") return origin;
-      return "https://acostator.pages.dev";
+      const allowed = (c.env.ALLOWED_ORIGINS ?? "").split(",").map((o: string) => o.trim());
+      if (allowed.includes(origin)) return origin;
+      return allowed[0] ?? origin;
     },
     credentials: true,
   })
