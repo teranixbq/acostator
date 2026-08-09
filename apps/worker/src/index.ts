@@ -29,12 +29,9 @@ app.get("/health", (c) => c.json({ ok: true, env: c.env.ENVIRONMENT }));
 
 // Routes
 app.route("/auth", authRoutes);
-app.use("/api/*", async (_c, next) => {
-  await next();
-});
-app.route("/api/projects", projectRoutes);
-app.route("/api/projects/:projectId/rows", rowRoutes);
-app.route("/api/projects/:projectId/categories", categoryRoutes);
+app.route("/projects", projectRoutes);
+app.route("/projects/:projectId/rows", rowRoutes);
+app.route("/projects/:projectId/categories", categoryRoutes);
 
 // 404 fallback
 app.notFound((c) => c.json({ error: "Not found" }, 404));
