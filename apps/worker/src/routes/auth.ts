@@ -112,7 +112,7 @@ authRoutes.get("/github/callback", zValidator("query", GithubCallbackSchema), as
     append: true,
   });
 
-  return c.redirect("/");
+  return c.redirect(c.env.FRONTEND_URL);
 });
 
 // POST /auth/logout
