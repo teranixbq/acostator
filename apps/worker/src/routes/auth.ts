@@ -105,7 +105,7 @@ authRoutes.get("/github/callback", zValidator("query", GithubCallbackSchema), as
     c.env.AUTH_SECRET
   );
 
-  setSessionCookie(c, token);
+  setSessionCookie(c, token, c.env.ALLOWED_DOMAIN);
 
   // Clear oauth state cookie
   c.header("Set-Cookie", "oauth_state=; HttpOnly; Secure; SameSite=Lax; Max-Age=0; Path=/", {
@@ -117,7 +117,7 @@ authRoutes.get("/github/callback", zValidator("query", GithubCallbackSchema), as
 
 // POST /auth/logout
 authRoutes.post("/logout", (c) => {
-  clearSessionCookie(c);
+  clearSessionCookie(c, c.env.ALLOWED_DOMAIN);
   return c.json({ success: true });
 });
 

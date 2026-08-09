@@ -58,15 +58,17 @@ export async function verifySessionToken(
   }
 }
 
-export function setSessionCookie(c: Context, token: string): void {
+export function setSessionCookie(c: Context, token: string, domain?: string): void {
+  const domainAttr = domain ? `; Domain=.${domain}` : "";
   c.header(
     "Set-Cookie",
-    `${COOKIE_NAME}=${token}; HttpOnly; Secure; SameSite=Lax; Max-Age=${COOKIE_MAX_AGE}; Path=/`
+    `${COOKIE_NAME}=${token}; HttpOnly; Secure; SameSite=Lax; Max-Age=${COOKIE_MAX_AGE}; Path=/${domainAttr}`
   );
 }
 
-export function clearSessionCookie(c: Context): void {
-  c.header("Set-Cookie", `${COOKIE_NAME}=; HttpOnly; Secure; SameSite=Lax; Max-Age=0; Path=/`);
+export function clearSessionCookie(c: Context, domain?: string): void {
+  const domainAttr = domain ? `; Domain=.${domain}` : "";
+  c.header("Set-Cookie", `${COOKIE_NAME}=; HttpOnly; Secure; SameSite=Lax; Max-Age=0; Path=/${domainAttr}`);
 }
 
 export function getSessionToken(c: Context): string | null {
