@@ -138,14 +138,18 @@ rowRoutes.patch(
     const db = createDb(c.env);
 
     const [project] = await db
-      .select({ id: projects.id })
+      .select({
+        id: projects.id,
+        annotation_order: projects.annotation_order,
+        annotation_queue: projects.annotation_queue,
+      })
       .from(projects)
       .where(and(eq(projects.id, projectId), eq(projects.user_id, session.user_id)));
 
     if (!project) return c.json({ error: "Not found" }, 404);
 
     const [row] = await db
-      .select({ id: datasetRows.id })
+      .select({ id: datasetRows.id, row_index: datasetRows.row_index })
       .from(datasetRows)
       .where(and(eq(datasetRows.id, rowId), eq(datasetRows.project_id, projectId)));
 
@@ -155,6 +159,19 @@ rowRoutes.patch(
       .update(datasetRows)
       .set({ status, updated_at: new Date().toISOString() })
       .where(eq(datasetRows.id, rowId));
+
+    // Pop the completed/skipped row from the random annotation queue
+    if (project.annotation_order === "random" && project.annotation_queue) {
+      const queue = JSON.parse(project.annotation_queue) as number[];
+      const updatedQueue = queue.filter((idx) => idx !== row.row_index);
+      await db
+        .update(projects)
+        .set({
+          annotation_queue: JSON.stringify(updatedQueue),
+          updated_at: new Date().toISOString(),
+        })
+        .where(eq(projects.id, projectId));
+    }
 
     return c.json({ success: true });
   }
