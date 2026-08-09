@@ -5,7 +5,7 @@ export type Env = {
   DB: D1Database;
   BUCKET: R2Bucket;
   ENVIRONMENT: string;
-  ALLOWED_ORIGINS: string;
+  ALLOWED_DOMAIN: string;
   GITHUB_CLIENT_ID: string;
   GITHUB_CLIENT_SECRET: string;
   AUTH_SECRET: string;
