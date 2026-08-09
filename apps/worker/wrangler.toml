@@ -1,0 +1,29 @@
+name = "acostator-worker"
+main = "src/index.ts"
+compatibility_date = "2024-12-18"
+compatibility_flags = ["nodejs_compat"]
+
+[[d1_databases]]
+binding = "DB"
+database_name = "acostator"
+database_id = "ba595437-9cac-4cf1-a441-9a85d75c01fe"
+
+[[r2_buckets]]
+binding = "BUCKET"
+bucket_name = "acostatorbq"
+
+[vars]
+ENVIRONMENT = "development"
+
+[env.preview]
+name = "acostator-worker-preview"
+vars = { ENVIRONMENT = "preview" }
+
+[[env.preview.d1_databases]]
+binding = "DB"
+database_name = "acostator-db-preview"
+database_id = "placeholder-preview"
+
+[[env.preview.r2_buckets]]
+binding = "BUCKET"
+bucket_name = "acostator-files-preview"
