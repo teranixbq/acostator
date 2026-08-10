@@ -4,6 +4,15 @@ This document is mandatory reading for any AI agent working on the Acostator cod
 
 ---
 
+## Branch Rules
+
+- **Feature branches** — semua perubahan code harus di branch tersendiri, PR ke `development`
+- **`setup-docs` branch** — branch khusus untuk update dokumentasi saja (`docs/`, `timeline/`, `*.md`). Tidak boleh menyentuh code. CI tidak jalan untuk PR dari branch ini.
+- **`development`** — base branch untuk semua agent. Jangan push langsung ke `development`.
+- **`main`** — production branch. Jangan sentuh.
+
+---
+
 ## Filesystem Access
 
 Your working directory is a git worktree under `/tmp/acostator-worktrees/<branch>/`.
