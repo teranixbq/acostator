@@ -58,3 +58,33 @@ Option B — Merge `development` into `main` when ready to release to production
 Document clearly in `AGENT.md` and architecture docs that the Cloudflare Workers production branch setting must match the integration branch used in this repo (`development`). Any agent or contributor setting up a new worker must verify this setting before expecting deploys to work.
 
 ---
+
+## Issue 3: D1 "Too Many SQL Variables" on CSV Upload
+
+**Symptom:** Uploading a CSV with more than ~500 rows caused the Worker to throw a D1 error: `too many SQL variables`. The upload appeared to succeed on the frontend but data was missing or the Worker crashed silently.
+
+**Root cause:**
+
+The original architecture inserted every CSV row as a `DatasetRow` record in D1 at upload time. D1 (SQLite) has a hard limit of 999 bound parameters per statement. With multi-column inserts batched naively, large CSVs exceeded this limit and caused the query to fail.
+
+Attempts to work around this with smaller batch sizes (e.g., 500 rows per transaction) only delayed the problem — batching reduced the frequency of the error but did not eliminate it for very large files, and it made uploads slow and resource-intensive.
+
+**Solution:**
+
+Redesigned the architecture to eliminate D1 row storage entirely:
+
+- CSV files are stored permanently in R2 after upload (already the case)
+- No `DatasetRow` records are inserted into D1 at any point
+- At annotation time, the browser fetches the CSV from R2 and parses it client-side with Papa Parse
+- D1 only stores `Annotation` records (quadruples), written one at a time as the user annotates
+
+This removes the upload bottleneck completely and makes the system scale to arbitrarily large CSVs.
+
+**Why this solution:**
+
+The root cause was architectural — trying to mirror row data into a database that was not designed for bulk inserts of arbitrary CSV content. The fix removes the mirror entirely. R2 is the right storage layer for the raw file; D1 is the right layer for structured annotation data only.
+
+**Status:**
+Verified: 2026-08-11
+
+---

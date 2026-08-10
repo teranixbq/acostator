@@ -58,3 +58,33 @@ Opsi B — Merge `development` ke `main` saat siap rilis ke produksi.
 Dokumentasikan dengan jelas di `AGENT.md` dan dokumen arsitektur bahwa pengaturan production branch Cloudflare Workers harus sesuai dengan branch integrasi yang digunakan di repo ini (`development`). Setiap agent atau kontributor yang menyiapkan worker baru harus memverifikasi pengaturan ini sebelum mengharapkan deploy berjalan.
 
 ---
+
+## Masalah 3: D1 "Too Many SQL Variables" saat Upload CSV
+
+**Gejala:** Mengupload CSV dengan lebih dari ~500 baris menyebabkan Worker melempar error D1: `too many SQL variables`. Upload terlihat berhasil di frontend, namun data hilang atau Worker crash diam-diam.
+
+**Akar masalah:**
+
+Arsitektur awal menginsert setiap baris CSV sebagai record `DatasetRow` di D1 saat upload. D1 (SQLite) memiliki batas keras 999 bound parameter per statement. Dengan insert multi-kolom yang di-batch secara naif, CSV besar melampaui batas ini dan menyebabkan query gagal.
+
+Upaya workaround dengan ukuran batch lebih kecil (mis. 500 baris per transaksi) hanya menunda masalah — batching mengurangi frekuensi error tapi tidak menghilangkannya untuk file yang sangat besar, dan membuat upload lambat serta boros resource.
+
+**Solusi:**
+
+Desain ulang arsitektur untuk menghilangkan penyimpanan row di D1 sepenuhnya:
+
+- File CSV disimpan permanen di R2 setelah upload (sudah berlaku sebelumnya)
+- Tidak ada record `DatasetRow` yang diinsert ke D1 kapanpun
+- Saat anotasi, browser fetch CSV dari R2 dan parse di sisi client dengan Papa Parse
+- D1 hanya menyimpan record `Annotation` (quadruples), yang ditulis satu per satu saat user melakukan anotasi
+
+Ini menghilangkan bottleneck upload sepenuhnya dan membuat sistem bisa menangani CSV berukuran sembarang.
+
+**Mengapa solusi ini:**
+
+Akar masalahnya bersifat arsitektural — mencoba mencerminkan data row ke database yang tidak dirancang untuk bulk insert konten CSV sembarang. Perbaikannya menghilangkan pencerminan itu sepenuhnya. R2 adalah layer penyimpanan yang tepat untuk file mentah; D1 adalah layer yang tepat hanya untuk data anotasi terstruktur.
+
+**Status:**
+Terverifikasi: 2026-08-11
+
+---
