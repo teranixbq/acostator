@@ -73,17 +73,23 @@ rowRoutes.get(
     if (!project) return c.json({ error: "Not found" }, 404);
 
     if (project.annotation_order === "random" && project.annotation_queue) {
-      // Pop first item from queue
       const queue = JSON.parse(project.annotation_queue) as number[];
-      const nextIndex = queue[0];
-      if (nextIndex === undefined) return c.json({ data: null });
 
-      const [row] = await db
-        .select()
-        .from(datasetRows)
-        .where(and(eq(datasetRows.project_id, projectId), eq(datasetRows.row_index, nextIndex)));
+      // Find the first queued index whose row is still pending/in_progress
+      // (idempotent: skips any entries already completed or skipped)
+      let nextRow: (typeof datasetRows.$inferSelect) | undefined;
+      for (const idx of queue) {
+        const [candidate] = await db
+          .select()
+          .from(datasetRows)
+          .where(and(eq(datasetRows.project_id, projectId), eq(datasetRows.row_index, idx)));
+        if (candidate && candidate.status !== "completed" && candidate.status !== "skipped") {
+          nextRow = candidate;
+          break;
+        }
+      }
 
-      return c.json({ data: row ?? null });
+      return c.json({ data: nextRow ?? null });
     }
 
     // Sequential: find first pending row
@@ -138,14 +144,18 @@ rowRoutes.patch(
     const db = createDb(c.env);
 
     const [project] = await db
-      .select({ id: projects.id })
+      .select({
+        id: projects.id,
+        annotation_order: projects.annotation_order,
+        annotation_queue: projects.annotation_queue,
+      })
       .from(projects)
       .where(and(eq(projects.id, projectId), eq(projects.user_id, session.user_id)));
 
     if (!project) return c.json({ error: "Not found" }, 404);
 
     const [row] = await db
-      .select({ id: datasetRows.id })
+      .select({ id: datasetRows.id, row_index: datasetRows.row_index })
       .from(datasetRows)
       .where(and(eq(datasetRows.id, rowId), eq(datasetRows.project_id, projectId)));
 
@@ -155,6 +165,22 @@ rowRoutes.patch(
       .update(datasetRows)
       .set({ status, updated_at: new Date().toISOString() })
       .where(eq(datasetRows.id, rowId));
+
+    // In random mode, remove this row's index from the queue so it won't be
+    // returned by /next again. We filter rather than shift so that skipped
+    // non-head rows are also handled correctly.
+    if (
+      project.annotation_order === "random" &&
+      project.annotation_queue &&
+      (status === "completed" || status === "skipped")
+    ) {
+      const queue = JSON.parse(project.annotation_queue) as number[];
+      const updated = queue.filter((idx) => idx !== row.row_index);
+      await db
+        .update(projects)
+        .set({ annotation_queue: JSON.stringify(updated), updated_at: new Date().toISOString() })
+        .where(eq(projects.id, projectId));
+    }
 
     return c.json({ success: true });
   }
