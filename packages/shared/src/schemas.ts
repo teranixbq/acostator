@@ -69,6 +69,15 @@ export const CategoryParamsSchema = z.object({
   categoryId: z.string().min(1),
 });
 
+// --- Upload ---
+
+export const UploadInitSchema = z.object({
+  file_name: z.string().min(1),
+  file_size: z.number().positive(),
+});
+
+export const UploadCompleteSchema = z.object({ upload_id: z.string().uuid() });
+
 // --- Pagination ---
 
 export const PaginationSchema = z.object({
@@ -82,3 +91,5 @@ export type UpdateProjectInput = z.infer<typeof UpdateProjectSchema>;
 export type CreateQuadrupleInput = z.infer<typeof CreateQuadrupleSchema>;
 export type CreateCategoryInput = z.infer<typeof CreateCategorySchema>;
 export type PaginationInput = z.infer<typeof PaginationSchema>;
+export type UploadInitInput = z.infer<typeof UploadInitSchema>;
+export type UploadCompleteInput = z.infer<typeof UploadCompleteSchema>;

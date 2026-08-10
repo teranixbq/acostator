@@ -3,6 +3,8 @@ import {
   PaginationSchema,
   ProjectParamsSchema,
   UpdateProjectSchema,
+  UploadCompleteSchema,
+  UploadInitSchema,
 } from "@acostator/shared";
 import { zValidator } from "@hono/zod-validator";
 import { and, count, eq, isNull, sql } from "drizzle-orm";
@@ -11,6 +13,7 @@ import { datasetRows, projects } from "../db/schema.ts";
 import type { Env } from "../lib/db.ts";
 import { createDb } from "../lib/db.ts";
 import { type AuthVariables, requireAuth } from "../middleware/auth.ts";
+import { completeUpload, initUpload, storeUploadedFile } from "../services/csv-upload.ts";
 
 type Variables = AuthVariables;
 
@@ -169,3 +172,122 @@ projectRoutes.delete("/:projectId", zValidator("param", ProjectParamsSchema), as
 
   return c.json({ success: true });
 });
+
+// POST /projects/:projectId/upload/init — reserve an uploadId + return upload URL
+projectRoutes.post(
+  "/:projectId/upload/init",
+  zValidator("param", ProjectParamsSchema),
+  zValidator("json", UploadInitSchema),
+  async (c) => {
+    const { projectId } = c.req.valid("param");
+    const { file_name, file_size } = c.req.valid("json");
+    const session = c.get("session");
+    const db = createDb(c.env);
+
+    // Verify project ownership
+    const [existing] = await db
+      .select({ id: projects.id })
+      .from(projects)
+      .where(
+        and(
+          eq(projects.id, projectId),
+          eq(projects.user_id, session.user_id),
+          isNull(projects.deleted_at)
+        )
+      );
+
+    if (!existing) return c.json({ error: "Not found" }, 404);
+
+    // Derive base URL from the incoming request so this works in any environment
+    const url = new URL(c.req.url);
+    const baseUrl = `${url.protocol}//${url.host}`;
+
+    const result = await initUpload(c.env, projectId, file_name, file_size, baseUrl);
+    return c.json({ data: result }, 201);
+  }
+);
+
+// PUT /projects/:projectId/upload/:uploadId — receive raw CSV body and store in R2
+projectRoutes.put(
+  "/:projectId/upload/:uploadId",
+  zValidator(
+    "param",
+    ProjectParamsSchema.extend({ uploadId: UploadCompleteSchema.shape.upload_id })
+  ),
+  async (c) => {
+    const { projectId, uploadId } = c.req.valid("param");
+    const session = c.get("session");
+    const db = createDb(c.env);
+
+    // Verify project ownership
+    const [existing] = await db
+      .select({ id: projects.id })
+      .from(projects)
+      .where(
+        and(
+          eq(projects.id, projectId),
+          eq(projects.user_id, session.user_id),
+          isNull(projects.deleted_at)
+        )
+      );
+
+    if (!existing) return c.json({ error: "Not found" }, 404);
+
+    const body = c.req.raw.body;
+    if (!body) return c.json({ error: "Request body is required" }, 400);
+
+    try {
+      await storeUploadedFile(c.env, projectId, uploadId, body);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Upload failed";
+      return c.json({ error: message }, 422);
+    }
+
+    return c.json({ success: true });
+  }
+);
+
+// POST /projects/:projectId/upload/complete — parse CSV and populate dataset_rows
+projectRoutes.post(
+  "/:projectId/upload/complete",
+  zValidator("param", ProjectParamsSchema),
+  zValidator("json", UploadCompleteSchema),
+  async (c) => {
+    const { projectId } = c.req.valid("param");
+    const { upload_id } = c.req.valid("json");
+    const session = c.get("session");
+    const db = createDb(c.env);
+
+    // Verify project ownership
+    const [existing] = await db
+      .select({ id: projects.id })
+      .from(projects)
+      .where(
+        and(
+          eq(projects.id, projectId),
+          eq(projects.user_id, session.user_id),
+          isNull(projects.deleted_at)
+        )
+      );
+
+    if (!existing) return c.json({ error: "Not found" }, 404);
+
+    try {
+      await completeUpload(c.env, db, projectId, upload_id, session.user_id);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Processing failed";
+      // Empty CSV / parse errors are user errors → 422
+      if (
+        message.includes("no data rows") ||
+        message.includes("header row") ||
+        message.includes("at least one")
+      ) {
+        return c.json({ error: message }, 422);
+      }
+      return c.json({ error: message }, 400);
+    }
+
+    const [updated] = await db.select().from(projects).where(eq(projects.id, projectId));
+    return c.json({ data: updated });
+  }
+);
