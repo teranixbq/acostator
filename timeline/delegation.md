@@ -42,8 +42,8 @@ After finishing, mark it done. This prevents two agents working on the same file
 | A | 001 — random queue bug fix | FREE | — | — | none |
 | B | 002 — csv upload backend + export backend | FREE | — | — | none |
 | C | 004 — quadruple annotation form | FREE | — | — | none |
-| D | 003 — project UI + csv upload frontend + export buttons | DONE | kiro | project-ui-csv-frontend | B must be DONE |
-| E | 006 — testing setup | RUNNING | kiro | testing-setup | A + B + C + D must be DONE |
+| D | 003 — project UI + csv upload frontend + export buttons | FREE | — | — | B must be DONE |
+| E | 006 — testing setup | FREE | — | — | A + B + C + D must be DONE |
 
 ---
 
@@ -85,6 +85,7 @@ Change your row status to `DONE` and add a row to the Completed Groups table.
 
 ## Completed Groups
 
+_(none yet)_
+
 | Group | Tasks | Branch | Agent | Date |
 |---|---|---|---|---|
-| D | 003 — project UI + csv upload frontend + export buttons | project-ui-csv-frontend | kiro | 2026-08-10 |
