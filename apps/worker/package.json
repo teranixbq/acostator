@@ -19,7 +19,7 @@
     "@acostator/shared": "*",
     "@hono/zod-validator": "0.4.1",
     "drizzle-orm": "0.36.4",
-    "hono": "4.6.14",
+    "hono": "4.12.34",
     "zod": "3.23.8"
   },
   "devDependencies": {
