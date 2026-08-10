@@ -1,5 +1,5 @@
 import { eq } from "drizzle-orm";
-import { datasetRows, projects } from "../db/schema.ts";
+import { projects } from "../db/schema.ts";
 import type { AppDb } from "../lib/db.ts";
 import type { Env } from "../lib/db.ts";
 
@@ -74,14 +74,13 @@ export async function storeUploadedFile(
 // completeUpload
 // ---------------------------------------------------------------------------
 
-// D1/SQLite caps SQL variables at 999 per statement. Each inserted row binds
-// 7 columns (id, project_id, row_index, text, status, created_at, updated_at).
-// 50 rows × 7 columns = 350 variables — safely under the limit.
-const BATCH_SIZE = 50;
+// D1 batch API limit: max 100 statements per env.DB.batch() call.
+const D1_BATCH_SIZE = 100;
 
 /**
- * Reads the CSV previously stored in R2, parses it, inserts dataset_rows in
- * batches of 50 (to stay under D1's 999 SQL-variable limit), optionally
+ * Reads the CSV previously stored in R2, parses it, inserts dataset_rows via
+ * D1's native batch API (each row is a separate prepared statement, so there
+ * is no risk of hitting D1/SQLite's 999 SQL-variable limit), optionally
  * shuffles the annotation queue, and updates the project record.
  */
 export async function completeUpload(
@@ -146,29 +145,25 @@ export async function completeUpload(
     throw new Error("CSV contains no data rows");
   }
 
-  // --- 5. Batch insert dataset_rows ---
+  // --- 5. Batch insert dataset_rows via D1 native batch API ---
+  // Each row becomes its own prepared statement so there is no risk of
+  // exceeding D1/SQLite's 999 SQL-variable limit regardless of CSV size.
   const now = new Date().toISOString();
   const rowIds: string[] = [];
 
-  for (let batchStart = 0; batchStart < dataLines.length; batchStart += BATCH_SIZE) {
-    const batch = dataLines.slice(batchStart, batchStart + BATCH_SIZE);
-    const values = batch.map((line, i) => {
-      const cols = parseCSVRow(line);
-      const text = cols[textColIndex] ?? "";
-      const id = crypto.randomUUID();
-      rowIds.push(id);
-      return {
-        id,
-        project_id: projectId,
-        row_index: batchStart + i,
-        text,
-        status: "pending" as const,
-        created_at: now,
-        updated_at: now,
-      };
-    });
+  const stmts = dataLines.map((line, i) => {
+    const cols = parseCSVRow(line);
+    const text = cols[textColIndex] ?? "";
+    const id = crypto.randomUUID();
+    rowIds.push(id);
+    return env.DB.prepare(
+      "INSERT INTO dataset_rows (id, project_id, row_index, text, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)"
+    ).bind(id, projectId, i, text, "pending", now, now);
+  });
 
-    await db.insert(datasetRows).values(values);
+  // D1 batch accepts at most 100 statements per call
+  for (let i = 0; i < stmts.length; i += D1_BATCH_SIZE) {
+    await env.DB.batch(stmts.slice(i, i + D1_BATCH_SIZE));
   }
 
   // --- 6. Build annotation queue for random order ---
