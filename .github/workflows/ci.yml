@@ -1,0 +1,40 @@
+name: CI
+
+on:
+  pull_request:
+    branches: ["development", "main"]
+    paths-ignore:
+      - "docs/**"
+      - "*.md"
+      - "timeline/**"
+
+jobs:
+  ci:
+    name: Lint, Typecheck, Test
+    runs-on: ubuntu-latest
+    # Skip CI entirely if PR is from setup-docs branch
+    if: github.head_ref != 'setup-docs'
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Biome check
+        run: npm run lint
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Test (worker)
+        run: npm run test -w apps/worker
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
