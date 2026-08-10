@@ -78,8 +78,12 @@ export function TextHighlighter({
         end: q.opinion_end as number,
         color: "opinion" as const,
       })),
-    ...(aspectSpan ? [{ start: aspectSpan.start, end: aspectSpan.end, color: "aspect" as const }] : []),
-    ...(opinionSpan ? [{ start: opinionSpan.start, end: opinionSpan.end, color: "opinion" as const }] : []),
+    ...(aspectSpan
+      ? [{ start: aspectSpan.start, end: aspectSpan.end, color: "aspect" as const }]
+      : []),
+    ...(opinionSpan
+      ? [{ start: opinionSpan.start, end: opinionSpan.end, color: "opinion" as const }]
+      : []),
   ];
 
   const segments = buildSegments(text, highlights);
@@ -93,11 +97,11 @@ export function TextHighlighter({
         className="rounded-lg border border-gray-200 bg-gray-50 px-4 py-3 text-sm leading-relaxed select-text cursor-text"
         aria-label={`Text for ${label} selection`}
       >
-        {segments.map((seg, i) => {
+        {segments.map((seg) => {
           if (seg.color === "aspect") {
             return (
               <mark
-                key={i}
+                key={seg.start}
                 className="bg-blue-200 text-blue-900 rounded px-0.5"
                 aria-label="aspect highlight"
               >
@@ -108,7 +112,7 @@ export function TextHighlighter({
           if (seg.color === "opinion") {
             return (
               <mark
-                key={i}
+                key={seg.start}
                 className="bg-green-200 text-green-900 rounded px-0.5"
                 aria-label="opinion highlight"
               >
@@ -116,7 +120,7 @@ export function TextHighlighter({
               </mark>
             );
           }
-          return <span key={i}>{seg.text}</span>;
+          return <span key={seg.start}>{seg.text}</span>;
         })}
       </p>
       <p className="text-xs text-gray-400">Click and drag to select text</p>
@@ -127,6 +131,7 @@ export function TextHighlighter({
 interface Segment {
   text: string;
   color: "aspect" | "opinion" | null;
+  start: number;
 }
 
 /**
@@ -157,7 +162,7 @@ function buildSegments(text: string, highlights: HighlightedSpan[]): Segment[] {
     while (j < text.length && (colorMap[j] ?? null) === color) {
       j++;
     }
-    segments.push({ text: text.slice(i, j), color });
+    segments.push({ text: text.slice(i, j), color, start: i });
     i = j;
   }
 

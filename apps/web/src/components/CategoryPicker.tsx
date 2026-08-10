@@ -88,10 +88,9 @@ export function CategoryPicker({ projectId, value, onChange }: CategoryPickerPro
     setCreating(true);
     setError(null);
     try {
-      const res = await api.post<CreateCategoryResponse>(
-        `/projects/${projectId}/categories`,
-        { name }
-      );
+      const res = await api.post<CreateCategoryResponse>(`/projects/${projectId}/categories`, {
+        name,
+      });
       onChange({ id: res.data.id, name: res.data.name });
       setOpen(false);
       setQuery("");
@@ -103,16 +102,12 @@ export function CategoryPicker({ projectId, value, onChange }: CategoryPickerPro
   }
 
   const trimmedQuery = query.trim();
-  const exactMatch = options.some(
-    (o) => o.name.toLowerCase() === trimmedQuery.toLowerCase()
-  );
+  const exactMatch = options.some((o) => o.name.toLowerCase() === trimmedQuery.toLowerCase());
   const showCreate = trimmedQuery.length > 0 && !exactMatch;
 
   return (
     <div ref={containerRef} className="relative">
-      <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-1">
-        Category
-      </p>
+      <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-1">Category</p>
       <button
         type="button"
         onClick={handleOpen}
@@ -148,18 +143,10 @@ export function CategoryPicker({ projectId, value, onChange }: CategoryPickerPro
             />
           </div>
 
-          {error && (
-            <p className="px-3 py-2 text-xs text-red-500">{error}</p>
-          )}
+          {error && <p className="px-3 py-2 text-xs text-red-500">{error}</p>}
 
-          <ul
-            role="listbox"
-            aria-label="Category options"
-            className="max-h-48 overflow-y-auto py-1"
-          >
-            {loading && (
-              <li className="px-3 py-2 text-xs text-gray-400">Loading...</li>
-            )}
+          <ul aria-label="Category options" className="max-h-48 overflow-y-auto py-1">
+            {loading && <li className="px-3 py-2 text-xs text-gray-400">Loading...</li>}
 
             {!loading && options.length === 0 && !showCreate && (
               <li className="px-3 py-2 text-xs text-gray-400">
@@ -170,37 +157,29 @@ export function CategoryPicker({ projectId, value, onChange }: CategoryPickerPro
             {options.map((cat) => (
               <li
                 key={cat.id}
-                role="option"
                 aria-selected={value?.id === cat.id}
                 onClick={() => handleSelect(cat)}
                 onKeyDown={(e) => {
                   if (e.key === "Enter" || e.key === " ") handleSelect(cat);
                 }}
-                tabIndex={0}
                 className="flex items-center justify-between px-3 py-2 text-sm cursor-pointer hover:bg-gray-50 focus:bg-gray-50 focus:outline-none"
               >
                 <span>{cat.name}</span>
-                {value?.id === cat.id && (
-                  <span className="text-gray-400 text-xs">selected</span>
-                )}
+                {value?.id === cat.id && <span className="text-gray-400 text-xs">selected</span>}
               </li>
             ))}
 
             {showCreate && (
               <li
-                role="option"
                 aria-selected={false}
                 onClick={() => void handleCreate()}
                 onKeyDown={(e) => {
                   if (e.key === "Enter" || e.key === " ") void handleCreate();
                 }}
-                tabIndex={0}
                 className="flex items-center gap-2 px-3 py-2 text-sm cursor-pointer hover:bg-gray-50 focus:bg-gray-50 focus:outline-none border-t border-gray-100"
               >
                 <span className="text-gray-400">+</span>
-                <span>
-                  {creating ? "Creating..." : `Create "${trimmedQuery}"`}
-                </span>
+                <span>{creating ? "Creating..." : `Create "${trimmedQuery}"`}</span>
               </li>
             )}
           </ul>

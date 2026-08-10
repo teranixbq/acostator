@@ -1,5 +1,5 @@
-import { api } from "@/lib/api.ts";
 import { QuadrupleForm } from "@/components/QuadrupleForm.tsx";
+import { api } from "@/lib/api.ts";
 import type { DatasetRow, Quadruple } from "@acostator/shared";
 import { useCallback, useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
@@ -62,9 +62,7 @@ export function AnnotatePage() {
   }, [loadNextRow]);
 
   function handleQuadrupleAdded(quadruple: Quadruple) {
-    setRow((prev) =>
-      prev ? { ...prev, quadruples: [...prev.quadruples, quadruple] } : prev
-    );
+    setRow((prev) => (prev ? { ...prev, quadruples: [...prev.quadruples, quadruple] } : prev));
   }
 
   async function handleDeleteQuadruple(quadrupleId: string) {
@@ -73,9 +71,7 @@ export function AnnotatePage() {
     try {
       await api.delete(`/projects/${projectId}/rows/${row.id}/quadruples/${quadrupleId}`);
       setRow((prev) =>
-        prev
-          ? { ...prev, quadruples: prev.quadruples.filter((q) => q.id !== quadrupleId) }
-          : prev
+        prev ? { ...prev, quadruples: prev.quadruples.filter((q) => q.id !== quadrupleId) } : prev
       );
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Failed to delete quadruple");
@@ -131,9 +127,7 @@ export function AnnotatePage() {
 
       {/* Row text (read-only display above the form) */}
       <div className="rounded-xl border border-gray-200 bg-white p-5">
-        <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">
-          Row text
-        </p>
+        <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">Row text</p>
         <p className="text-sm leading-relaxed text-gray-900">{row.text}</p>
       </div>
 

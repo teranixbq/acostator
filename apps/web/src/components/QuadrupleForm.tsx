@@ -76,8 +76,8 @@ export function QuadrupleForm({
     e.preventDefault();
     setError(null);
 
-    const aspectTerm = aspectImplicit ? "NULL" : aspectSpan?.text ?? "";
-    const opinionTerm = opinionImplicit ? "NULL" : opinionSpan?.text ?? "";
+    const aspectTerm = aspectImplicit ? "NULL" : (aspectSpan?.text ?? "");
+    const opinionTerm = opinionImplicit ? "NULL" : (opinionSpan?.text ?? "");
 
     if (!aspectTerm) {
       setError("Select an aspect term or mark it as implicit.");
@@ -131,7 +131,10 @@ export function QuadrupleForm({
     sentiment !== null;
 
   return (
-    <form onSubmit={(e) => void handleSubmit(e)} className="space-y-5 rounded-xl border border-gray-200 bg-white p-5">
+    <form
+      onSubmit={(e) => void handleSubmit(e)}
+      className="space-y-5 rounded-xl border border-gray-200 bg-white p-5"
+    >
       <h3 className="text-sm font-semibold text-gray-900">Add quadruple</h3>
 
       {/* Text highlighter — shared for aspect and opinion */}
@@ -182,11 +185,7 @@ export function QuadrupleForm({
                 : "border-gray-200 bg-gray-50 text-gray-400"
             }`}
           >
-            {aspectImplicit
-              ? "Implicit"
-              : aspectSpan
-              ? aspectSpan.text
-              : "Highlight text above..."}
+            {aspectImplicit ? "Implicit" : aspectSpan ? aspectSpan.text : "Highlight text above..."}
           </span>
           <label className="flex items-center gap-1.5 text-xs text-gray-500 cursor-pointer select-none">
             <input
@@ -214,11 +213,7 @@ export function QuadrupleForm({
       </div>
 
       {/* Category */}
-      <CategoryPicker
-        projectId={projectId}
-        value={category}
-        onChange={setCategory}
-      />
+      <CategoryPicker projectId={projectId} value={category} onChange={setCategory} />
 
       {/* Opinion term */}
       <div className="space-y-1.5">
@@ -234,8 +229,8 @@ export function QuadrupleForm({
             {opinionImplicit
               ? "Implicit"
               : opinionSpan
-              ? opinionSpan.text
-              : "Highlight text above..."}
+                ? opinionSpan.text
+                : "Highlight text above..."}
           </span>
           <label className="flex items-center gap-1.5 text-xs text-gray-500 cursor-pointer select-none">
             <input
@@ -267,10 +262,7 @@ export function QuadrupleForm({
         <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">Sentiment</p>
         <div className="flex gap-3 flex-wrap">
           {SENTIMENTS.map(({ value, label, color }) => (
-            <label
-              key={value}
-              className="flex items-center gap-1.5 cursor-pointer select-none"
-            >
+            <label key={value} className="flex items-center gap-1.5 cursor-pointer select-none">
               <input
                 type="radio"
                 name="sentiment"
