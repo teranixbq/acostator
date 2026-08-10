@@ -137,6 +137,7 @@ export function UploadCSVModal({ projectId, onClose, onUploaded }: Props) {
         xhr.onabort = () => reject(new Error("Upload cancelled"));
 
         xhr.open("PUT", uploadUrl);
+        xhr.withCredentials = true;
         xhr.setRequestHeader("Content-Type", "text/csv");
         xhr.send(file);
       });
