@@ -136,6 +136,12 @@ export function ProjectsPage() {
                     >
                       Annotate
                     </Link>
+                    <Link
+                      to={`/projects/${project.id}`}
+                      className="rounded-lg border border-gray-200 px-3 py-1.5 text-sm hover:bg-gray-50"
+                    >
+                      Settings
+                    </Link>
                   </div>
                 </div>
 
