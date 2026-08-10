@@ -21,16 +21,13 @@ After finishing, mark it done. This prevents two agents working on the same file
 ## Dependency Graph
 
 ```
-(parallel, no deps)
-  Group A — 001 random-queue-bug     → rows.ts only
-  Group B — 002 csv-upload + export  → worker backend only
-  Group C — 004 quadruple-form       → annotate.tsx + new components
+── Phase 1 (parallel, no file overlap) ──
+  Group I  — 010 backend-refactor    → apps/worker/ only
+  Group J  — 011 frontend-annotate   → apps/web/ only
+  Group K  — 013 docs-update         → docs/ + setup-docs branch only
 
-(waits for Group B to be DONE)
-  Group D — 003 project-ui + csv-frontend + export-buttons → projects.tsx + new modal components
-
-(waits for A + B + C + D all DONE)
-  Group E — 006 testing-setup        → test files + vitest config
+── Phase 2 (waits for I + J merged) ──
+  Group L  — 012 testing-update      → apps/worker/src/tests/ only
 ```
 
 ---
@@ -47,6 +44,10 @@ After finishing, mark it done. This prevents two agents working on the same file
 | F | 007 — modal centering + annotation_order move to project detail | DONE | agent-f | modal-annotation-order-fix | none |
 | G | 008 — upload modal auto-open fix, centering, annotate button disabled | DONE | agent-g | upload-modal-fixes | none |
 | H | 009 — fix upload route 404 (Hono routing conflict) | DONE | agent-h | upload-route-fix | none |
+| I | 010 — backend refactor: CSV in R2, text_column, annotations endpoint | FREE | — | backend-refactor | none |
+| J | 011 — frontend annotate: column picker, IndexedDB, local nav, sync | FREE | — | frontend-annotate | none |
+| K | 013 — docs update: reflect new architecture (setup-docs branch) | FREE | — | setup-docs | none |
+| L | 012 — testing update: update tests for new architecture | FREE | — | testing-update | I + J must be DONE |
 
 ---
 
