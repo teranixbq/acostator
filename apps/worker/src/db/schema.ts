@@ -25,6 +25,7 @@ export const projects = sqliteTable("projects", {
   file_name: text("file_name").notNull(),
   file_size: integer("file_size").notNull(),
   total_rows: integer("total_rows").notNull(),
+  text_column: text("text_column").notNull().default(""),
   status: text("status", { enum: ["active", "archived"] })
     .notNull()
     .default("active"),
@@ -109,3 +110,33 @@ export const quadruples = sqliteTable("quadruples", {
   created_at: text("created_at").notNull().default(sql`(datetime('now'))`),
   updated_at: text("updated_at").notNull().default(sql`(datetime('now'))`),
 });
+
+// --- annotations ---
+// Flat quadruple records keyed by project + row_index.
+// No FK to dataset_rows — rows live in R2 CSV, not D1.
+
+export const annotations = sqliteTable(
+  "annotations",
+  {
+    id: text("id").primaryKey(),
+    project_id: text("project_id")
+      .notNull()
+      .references(() => projects.id),
+    row_index: integer("row_index").notNull(),
+    aspect: text("aspect").notNull(),
+    category: text("category").notNull(),
+    opinion: text("opinion").notNull(),
+    sentiment: text("sentiment", {
+      enum: ["positive", "negative", "neutral", "mixed"],
+    }).notNull(),
+    created_at: text("created_at").notNull().default(sql`(datetime('now'))`),
+    updated_at: text("updated_at").notNull().default(sql`(datetime('now'))`),
+  },
+  (table) => ({
+    project_row_aspect_idx: uniqueIndex("annotations_project_row_aspect_idx").on(
+      table.project_id,
+      table.row_index,
+      table.aspect
+    ),
+  })
+);

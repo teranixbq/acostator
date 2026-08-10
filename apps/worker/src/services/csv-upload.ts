@@ -29,12 +29,13 @@ export async function initUpload(
   projectId: string,
   fileName: string,
   fileSize: number,
+  textColumn: string,
   baseUrl: string
 ): Promise<InitUploadResult> {
   const uploadId = crypto.randomUUID();
 
-  // Store metadata so completeUpload can validate ownership
-  const meta = JSON.stringify({ projectId, fileName, fileSize });
+  // Store metadata so completeUpload can validate ownership and know which column is text
+  const meta = JSON.stringify({ projectId, fileName, fileSize, textColumn });
   await env.BUCKET.put(`uploads/${projectId}/${uploadId}.meta.json`, meta, {
     httpMetadata: { contentType: "application/json" },
   });
@@ -51,7 +52,7 @@ export async function initUpload(
 
 /**
  * Receives the raw CSV bytes the client PUT to the worker and persists them
- * in R2 for completeUpload to process.
+ * in R2 temporarily until completeUpload is called.
  */
 export async function storeUploadedFile(
   env: Env,
@@ -74,14 +75,13 @@ export async function storeUploadedFile(
 // completeUpload
 // ---------------------------------------------------------------------------
 
-// D1 batch API limit: max 100 statements per env.DB.batch() call.
-const D1_BATCH_SIZE = 100;
-
 /**
- * Reads the CSV previously stored in R2, parses it, inserts dataset_rows via
- * D1's native batch API (each row is a separate prepared statement, so there
- * is no risk of hitting D1/SQLite's 999 SQL-variable limit), optionally
- * shuffles the annotation queue, and updates the project record.
+ * Reads the CSV previously stored in R2, counts data rows, copies it to the
+ * permanent project key in R2, and updates the project record (file_name,
+ * file_size, total_rows, text_column).
+ *
+ * No rows are inserted into D1 — the CSV stays in R2 and is the source of
+ * truth for row data.
  */
 export async function completeUpload(
   env: Env,
@@ -90,13 +90,9 @@ export async function completeUpload(
   uploadId: string,
   _userId: string
 ): Promise<void> {
-  // --- 1. Verify project ownership ---
+  // --- 1. Verify project exists ---
   const [project] = await db
-    .select({
-      id: projects.id,
-      annotation_order: projects.annotation_order,
-      file_name: projects.file_name,
-    })
+    .select({ id: projects.id })
     .from(projects)
     .where(eq(projects.id, projectId));
 
@@ -106,7 +102,7 @@ export async function completeUpload(
   const metaObj = await env.BUCKET.get(`uploads/${projectId}/${uploadId}.meta.json`);
   if (!metaObj) throw new Error("Upload metadata not found — was init called?");
 
-  type UploadMeta = { projectId: string; fileName: string; fileSize: number };
+  type UploadMeta = { projectId: string; fileName: string; fileSize: number; textColumn: string };
   const meta = (await metaObj.json()) as UploadMeta;
 
   if (meta.projectId !== projectId) throw new Error("Upload does not belong to this project");
@@ -117,100 +113,71 @@ export async function completeUpload(
 
   const csvText = await csvObj.text();
 
-  // --- 4. Parse CSV (no external libraries — pure TextDecoder approach) ---
+  // --- 4. Parse and validate CSV ---
   const lines = splitCsvLines(csvText);
 
   if (lines.length < 2) {
-    // Clean up R2 artefacts before throwing so we don't leave orphans
-    await cleanupR2(env, projectId, uploadId);
+    await cleanupR2Temp(env, projectId, uploadId);
     throw new Error("CSV must have a header row and at least one data row");
   }
 
   // lines[0] is safe: we checked lines.length >= 2 above
   const headers = parseCSVRow(lines[0] as string);
   if (headers.length === 0) {
-    await cleanupR2(env, projectId, uploadId);
+    await cleanupR2Temp(env, projectId, uploadId);
     throw new Error("CSV header row is empty");
   }
 
-  // Find the `text` column; fall back to the first column
-  const textColIndex = (() => {
-    const idx = headers.findIndex((h) => h.toLowerCase() === "text");
-    return idx === -1 ? 0 : idx;
-  })();
+  // Count data rows (everything after the header)
+  const totalRows = lines.length - 1;
 
-  const dataLines = lines.slice(1).filter((l) => l.trim() !== "");
-  if (dataLines.length === 0) {
-    await cleanupR2(env, projectId, uploadId);
-    throw new Error("CSV contains no data rows");
-  }
-
-  // --- 5. Batch insert dataset_rows via D1 native batch API ---
-  // Each row becomes its own prepared statement so there is no risk of
-  // exceeding D1/SQLite's 999 SQL-variable limit regardless of CSV size.
-  const now = new Date().toISOString();
-  const rowIds: string[] = [];
-
-  const stmts = dataLines.map((line, i) => {
-    const cols = parseCSVRow(line);
-    const text = cols[textColIndex] ?? "";
-    const id = crypto.randomUUID();
-    rowIds.push(id);
-    return env.DB.prepare(
-      "INSERT INTO dataset_rows (id, project_id, row_index, text, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)"
-    ).bind(id, projectId, i, text, "pending", now, now);
+  // --- 5. Copy CSV to permanent project key in R2 ---
+  // Key: projects/{projectId}/data.csv — stable URL for GET /projects/:id/csv
+  await env.BUCKET.put(`projects/${projectId}/data.csv`, csvText, {
+    httpMetadata: { contentType: "text/csv" },
   });
 
-  // D1 batch accepts at most 100 statements per call
-  for (let i = 0; i < stmts.length; i += D1_BATCH_SIZE) {
-    await env.DB.batch(stmts.slice(i, i + D1_BATCH_SIZE));
-  }
+  // --- 6. Delete temp upload artefacts ---
+  await cleanupR2Temp(env, projectId, uploadId);
 
-  // --- 6. Build annotation queue for random order ---
-  let annotationQueue: string | null = null;
-  if ((await getAnnotationOrder(db, projectId)) === "random") {
-    const indices = rowIds.map((_, i) => i);
-    fisherYatesShuffle(indices);
-    annotationQueue = JSON.stringify(indices);
-  }
-
-  // --- 7. Update project ---
+  // --- 7. Update project record ---
   await db
     .update(projects)
     .set({
       file_name: meta.fileName,
       file_size: meta.fileSize,
-      total_rows: dataLines.length,
-      annotation_queue: annotationQueue,
-      updated_at: now,
+      total_rows: totalRows,
+      text_column: meta.textColumn,
+      updated_at: new Date().toISOString(),
     })
     .where(eq(projects.id, projectId));
-
-  // --- 8. Delete R2 artefacts ---
-  await cleanupR2(env, projectId, uploadId);
 }
 
 // ---------------------------------------------------------------------------
-// Helpers
+// getProjectCsv
 // ---------------------------------------------------------------------------
 
-async function getAnnotationOrder(db: AppDb, projectId: string): Promise<string> {
-  const [p] = await db
-    .select({ annotation_order: projects.annotation_order })
-    .from(projects)
-    .where(eq(projects.id, projectId));
-  return p?.annotation_order ?? "sequential";
+/**
+ * Returns the R2 object for a project's permanent CSV, or null if not found.
+ */
+export async function getProjectCsv(env: Env, projectId: string): Promise<R2ObjectBody | null> {
+  return env.BUCKET.get(`projects/${projectId}/data.csv`);
 }
 
-async function cleanupR2(env: Env, projectId: string, uploadId: string): Promise<void> {
-  await env.BUCKET.delete([
-    `uploads/${projectId}/${uploadId}.csv`,
-    `uploads/${projectId}/${uploadId}.meta.json`,
+// ---------------------------------------------------------------------------
+// Helpers (private)
+// ---------------------------------------------------------------------------
+
+/** Deletes the temporary upload artefacts (meta + raw csv) from R2. */
+async function cleanupR2Temp(env: Env, projectId: string, uploadId: string): Promise<void> {
+  await Promise.all([
+    env.BUCKET.delete(`uploads/${projectId}/${uploadId}.meta.json`),
+    env.BUCKET.delete(`uploads/${projectId}/${uploadId}.csv`),
   ]);
 }
 
 /**
- * Splits a CSV string into non-empty logical lines, handling quoted fields
+ * Splits a CSV string into lines, correctly handling quoted fields
  * that may contain embedded newlines.
  */
 function splitCsvLines(csv: string): string[] {
@@ -268,15 +235,4 @@ function parseCSVRow(row: string): string[] {
   }
   fields.push(current);
   return fields;
-}
-
-/** In-place Fisher-Yates shuffle */
-function fisherYatesShuffle(arr: number[]): void {
-  for (let i = arr.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    // noUncheckedIndexedAccess: i and j are always valid indices by construction
-    const tmp = arr[i] as number;
-    arr[i] = arr[j] as number;
-    arr[j] = tmp;
-  }
 }
