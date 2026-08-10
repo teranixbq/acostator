@@ -74,12 +74,15 @@ export async function storeUploadedFile(
 // completeUpload
 // ---------------------------------------------------------------------------
 
-const BATCH_SIZE = 500;
+// D1/SQLite caps SQL variables at 999 per statement. Each inserted row binds
+// 7 columns (id, project_id, row_index, text, status, created_at, updated_at).
+// 50 rows × 7 columns = 350 variables — safely under the limit.
+const BATCH_SIZE = 50;
 
 /**
  * Reads the CSV previously stored in R2, parses it, inserts dataset_rows in
- * batches of 500, optionally shuffles the annotation queue, and updates the
- * project record.
+ * batches of 50 (to stay under D1's 999 SQL-variable limit), optionally
+ * shuffles the annotation queue, and updates the project record.
  */
 export async function completeUpload(
   env: Env,
