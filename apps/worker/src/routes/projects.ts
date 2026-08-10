@@ -13,11 +13,7 @@ import { datasetRows, projects } from "../db/schema.ts";
 import type { Env } from "../lib/db.ts";
 import { createDb } from "../lib/db.ts";
 import { type AuthVariables, requireAuth } from "../middleware/auth.ts";
-import {
-  completeUpload,
-  initUpload,
-  storeUploadedFile,
-} from "../services/csv-upload.ts";
+import { completeUpload, initUpload, storeUploadedFile } from "../services/csv-upload.ts";
 
 type Variables = AuthVariables;
 
@@ -214,7 +210,10 @@ projectRoutes.post(
 // PUT /projects/:projectId/upload/:uploadId — receive raw CSV body and store in R2
 projectRoutes.put(
   "/:projectId/upload/:uploadId",
-  zValidator("param", ProjectParamsSchema.extend({ uploadId: UploadCompleteSchema.shape.upload_id })),
+  zValidator(
+    "param",
+    ProjectParamsSchema.extend({ uploadId: UploadCompleteSchema.shape.upload_id })
+  ),
   async (c) => {
     const { projectId, uploadId } = c.req.valid("param");
     const session = c.get("session");

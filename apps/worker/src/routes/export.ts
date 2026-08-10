@@ -58,16 +58,13 @@ exportRoutes.get(
       if (format === "csv") {
         // Return empty CSV with just the header
         c.header("Content-Type", "text/csv; charset=utf-8");
-        c.header(
-          "Content-Disposition",
-          `attachment; filename="export-${projectId}.csv"`
-        );
+        c.header("Content-Disposition", `attachment; filename="export-${projectId}.csv"`);
         return c.body("text/aspect_term,category,opinion_term,sentiment\n");
       }
       return c.json({ project: { id: project.id, name: project.name }, rows: [] });
     }
 
-    const rowIds = completedRows.map((r) => r.id);
+    const _rowIds = completedRows.map((r) => r.id);
 
     // Fetch all quadruples for these rows in one query
     // We join categories to get the category name
@@ -108,10 +105,7 @@ exportRoutes.get(
       }));
 
       c.header("Content-Type", "application/json; charset=utf-8");
-      c.header(
-        "Content-Disposition",
-        `attachment; filename="export-${projectId}.json"`
-      );
+      c.header("Content-Disposition", `attachment; filename="export-${projectId}.json"`);
       return c.json({ project: { id: project.id, name: project.name }, rows });
     }
 
@@ -122,9 +116,7 @@ exportRoutes.get(
     for (const row of completedRows) {
       const rowQuads = quadsByRow.get(row.id) ?? [];
       if (rowQuads.length === 0) {
-        csvLines.push(
-          [csvEscape(row.text), "", "", "", ""].join(",")
-        );
+        csvLines.push([csvEscape(row.text), "", "", "", ""].join(","));
       } else {
         for (const q of rowQuads) {
           csvLines.push(
@@ -140,13 +132,10 @@ exportRoutes.get(
       }
     }
 
-    const csvBody = csvLines.join("\n") + "\n";
+    const csvBody = `${csvLines.join("\n")}\n`;
 
     c.header("Content-Type", "text/csv; charset=utf-8");
-    c.header(
-      "Content-Disposition",
-      `attachment; filename="export-${projectId}.csv"`
-    );
+    c.header("Content-Disposition", `attachment; filename="export-${projectId}.csv"`);
     return c.body(csvBody);
   }
 );

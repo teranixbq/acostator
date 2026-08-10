@@ -86,7 +86,7 @@ export async function completeUpload(
   db: AppDb,
   projectId: string,
   uploadId: string,
-  userId: string
+  _userId: string
 ): Promise<void> {
   // --- 1. Verify project ownership ---
   const [project] = await db
