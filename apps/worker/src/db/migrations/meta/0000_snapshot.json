@@ -66,12 +66,8 @@
           "name": "categories_project_id_projects_id_fk",
           "tableFrom": "categories",
           "tableTo": "projects",
-          "columnsFrom": [
-            "project_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["project_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
@@ -139,10 +135,7 @@
       "indexes": {
         "dataset_rows_project_row_idx": {
           "name": "dataset_rows_project_row_idx",
-          "columns": [
-            "project_id",
-            "row_index"
-          ],
+          "columns": ["project_id", "row_index"],
           "isUnique": true
         }
       },
@@ -151,12 +144,8 @@
           "name": "dataset_rows_project_id_projects_id_fk",
           "tableFrom": "dataset_rows",
           "tableTo": "projects",
-          "columnsFrom": [
-            "project_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["project_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
@@ -270,12 +259,8 @@
           "name": "projects_user_id_users_id_fk",
           "tableFrom": "projects",
           "tableTo": "users",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["user_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
@@ -403,12 +388,8 @@
           "name": "quadruples_row_id_dataset_rows_id_fk",
           "tableFrom": "quadruples",
           "tableTo": "dataset_rows",
-          "columnsFrom": [
-            "row_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["row_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         },
@@ -416,12 +397,8 @@
           "name": "quadruples_project_id_projects_id_fk",
           "tableFrom": "quadruples",
           "tableTo": "projects",
-          "columnsFrom": [
-            "project_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["project_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         },
@@ -429,12 +406,8 @@
           "name": "quadruples_category_id_categories_id_fk",
           "tableFrom": "quadruples",
           "tableTo": "categories",
-          "columnsFrom": [
-            "category_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["category_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
@@ -501,9 +474,7 @@
       "indexes": {
         "users_github_id_unique": {
           "name": "users_github_id_unique",
-          "columns": [
-            "github_id"
-          ],
+          "columns": ["github_id"],
           "isUnique": true
         }
       },
