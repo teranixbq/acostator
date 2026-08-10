@@ -46,7 +46,7 @@ After finishing, mark it done. This prevents two agents working on the same file
 | E | 006 — testing setup | DONE | agent-e | testing-setup | A + B + C + D must be DONE |
 | F | 007 — modal centering + annotation_order move to project detail | DONE | agent-f | modal-annotation-order-fix | none |
 | G | 008 — upload modal auto-open fix, centering, annotate button disabled | DONE | agent-g | upload-modal-fixes | none |
-| H | 009 — fix upload route 404 (Hono routing conflict) | RUNNING | agent-h | upload-route-fix | none |
+| H | 009 — fix upload route 404 (Hono routing conflict) | DONE | agent-h | upload-route-fix | none |
 
 ---
 
