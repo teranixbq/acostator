@@ -13,7 +13,6 @@ export function CreateProjectModal({ onClose, onCreated }: Props) {
 
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
-  const [annotationOrder, setAnnotationOrder] = useState<"sequential" | "random">("sequential");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -61,7 +60,7 @@ export function CreateProjectModal({ onClose, onCreated }: Props) {
       const res = await api.post<{ data: Project }>("/projects", {
         name: name.trim(),
         description: description.trim() || undefined,
-        annotation_order: annotationOrder,
+        annotation_order: "sequential",
       });
       onCreated(res.data);
     } catch (err) {
@@ -73,7 +72,7 @@ export function CreateProjectModal({ onClose, onCreated }: Props) {
   return (
     <dialog
       ref={dialogRef}
-      className="w-full max-w-md rounded-xl p-0 shadow-xl backdrop:bg-black/40"
+      className="m-auto w-full max-w-md rounded-xl p-0 shadow-xl backdrop:bg-black/40"
       aria-labelledby="create-project-title"
     >
       <form onSubmit={handleSubmit} noValidate>
@@ -119,28 +118,6 @@ export function CreateProjectModal({ onClose, onCreated }: Props) {
               placeholder="Optional description"
             />
           </div>
-
-          {/* Annotation order */}
-          <fieldset>
-            <legend className="mb-2 block text-sm font-medium text-gray-700">
-              Annotation order
-            </legend>
-            <div className="flex gap-4">
-              {(["sequential", "random"] as const).map((order) => (
-                <label key={order} className="flex cursor-pointer items-center gap-2 text-sm">
-                  <input
-                    type="radio"
-                    name="annotation_order"
-                    value={order}
-                    checked={annotationOrder === order}
-                    onChange={() => setAnnotationOrder(order)}
-                    className="accent-gray-900"
-                  />
-                  <span className="capitalize">{order}</span>
-                </label>
-              ))}
-            </div>
-          </fieldset>
 
           {error && <p className="text-sm text-red-600">{error}</p>}
         </div>
