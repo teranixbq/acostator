@@ -2,10 +2,7 @@
   "name": "acostator",
   "version": "0.0.1",
   "private": true,
-  "workspaces": [
-    "apps/*",
-    "packages/*"
-  ],
+  "workspaces": ["apps/*", "packages/*"],
   "scripts": {
     "dev:worker": "npm run dev -w apps/worker",
     "dev:web": "npm run dev -w apps/web",

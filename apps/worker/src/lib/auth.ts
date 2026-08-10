@@ -68,7 +68,10 @@ export function setSessionCookie(c: Context, token: string, domain?: string): vo
 
 export function clearSessionCookie(c: Context, domain?: string): void {
   const domainAttr = domain ? `; Domain=.${domain}` : "";
-  c.header("Set-Cookie", `${COOKIE_NAME}=; HttpOnly; Secure; SameSite=Lax; Max-Age=0; Path=/${domainAttr}`);
+  c.header(
+    "Set-Cookie",
+    `${COOKIE_NAME}=; HttpOnly; Secure; SameSite=Lax; Max-Age=0; Path=/${domainAttr}`
+  );
 }
 
 export function getSessionToken(c: Context): string | null {
