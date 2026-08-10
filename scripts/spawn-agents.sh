@@ -32,9 +32,9 @@ ok "Fetched"
 
 # Agent definitions: "label|branch|task_file"
 declare -a AGENTS=(
-  "queue-bug|random-queue-bug|timeline/TODO.001.random-queue-bug.md"
-  "csv-export-backend|csv-upload-export-backend|timeline/TODO.002.csv-upload-and-export-backend.md"
-  "quad-form|quadruple-form|timeline/TODO.004.quadruple-form.md"
+  "BE-queue-bug|random-queue-bug|timeline/TODO.001.random-queue-bug.md"
+  "BE-csv-export|csv-upload-export-backend|timeline/TODO.002.csv-upload-and-export-backend.md"
+  "FE-quad-form|quadruple-form|timeline/TODO.004.quadruple-form.md"
 )
 
 for agent in "${AGENTS[@]}"; do

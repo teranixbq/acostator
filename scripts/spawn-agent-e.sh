@@ -19,7 +19,7 @@ GREEN='\033[0;32m'; BLUE='\033[0;34m'; NC='\033[0m'
 log() { echo -e "${BLUE}[spawn]${NC} $*"; }
 ok()  { echo -e "${GREEN}[ok]${NC} $*"; }
 
-LABEL="testing"
+LABEL="BE-testing"
 BRANCH="testing-setup"
 TASK_FILE="timeline/TODO.006.testing-setup.md"
 WORKTREE="$WORKTREES_BASE/$BRANCH"
