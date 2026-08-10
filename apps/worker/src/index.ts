@@ -2,10 +2,7 @@ import { Hono } from "hono";
 import { cors } from "hono/cors";
 import type { Env } from "./lib/db.ts";
 import { authRoutes } from "./routes/auth.ts";
-import { categoryRoutes } from "./routes/categories.ts";
-import { exportRoutes } from "./routes/export.ts";
 import { projectRoutes } from "./routes/projects.ts";
-import { rowRoutes } from "./routes/rows.ts";
 
 const app = new Hono<{ Bindings: Env }>();
 
@@ -31,9 +28,6 @@ app.get("/health", (c) => c.json({ ok: true, env: c.env.ENVIRONMENT }));
 // Routes
 app.route("/auth", authRoutes);
 app.route("/projects", projectRoutes);
-app.route("/projects/:projectId/rows", rowRoutes);
-app.route("/projects/:projectId/categories", categoryRoutes);
-app.route("/projects", exportRoutes);
 
 // 404 fallback
 app.notFound((c) => {
