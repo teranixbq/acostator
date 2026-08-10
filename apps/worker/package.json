@@ -8,7 +8,7 @@
     "deploy": "wrangler deploy --config wrangler.jsonc",
     "deploy:preview": "wrangler deploy --config wrangler.jsonc --env preview",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run",
+    "test": "vitest run --passWithNoTests",
     "test:watch": "vitest",
     "db:generate": "cd ../.. && node_modules/.bin/drizzle-kit generate --config=apps/worker/drizzle.config.ts",
     "db:migrate:local": "wrangler d1 migrations apply acostator --local --config wrangler.jsonc",
