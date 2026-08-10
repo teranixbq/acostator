@@ -140,7 +140,7 @@ interface Segment {
  */
 function buildSegments(text: string, highlights: HighlightedSpan[]): Segment[] {
   if (highlights.length === 0) {
-    return [{ text, color: null }];
+    return [{ text, color: null, start: 0 }];
   }
 
   // Build a per-character color map; last highlight wins for overlaps
