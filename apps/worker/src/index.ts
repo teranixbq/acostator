@@ -3,6 +3,7 @@ import { cors } from "hono/cors";
 import type { Env } from "./lib/db.ts";
 import { authRoutes } from "./routes/auth.ts";
 import { categoryRoutes } from "./routes/categories.ts";
+import { exportRoutes } from "./routes/export.ts";
 import { projectRoutes } from "./routes/projects.ts";
 import { rowRoutes } from "./routes/rows.ts";
 
@@ -32,6 +33,7 @@ app.route("/auth", authRoutes);
 app.route("/projects", projectRoutes);
 app.route("/projects/:projectId/rows", rowRoutes);
 app.route("/projects/:projectId/categories", categoryRoutes);
+app.route("/projects", exportRoutes);
 
 // 404 fallback
 app.notFound((c) => {
