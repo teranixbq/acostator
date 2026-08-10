@@ -175,7 +175,7 @@ export function UploadCSVModal({ projectId, onClose, onUploaded }: Props) {
   return (
     <dialog
       ref={dialogRef}
-      className="w-full max-w-md rounded-xl p-0 shadow-xl backdrop:bg-black/40"
+      className="m-auto w-full max-w-md rounded-xl p-0 shadow-xl backdrop:bg-black/40"
       aria-labelledby="upload-csv-title"
     >
       <div className="px-6 pt-6 pb-2">
