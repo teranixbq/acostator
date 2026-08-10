@@ -129,6 +129,8 @@ $TASK_CONTENT"
 done
 
 echo ""
+log "Waiting 10s for panes to be ready..."
+sleep 10
 log "Phase 2: Starting all ${#WS_IDS[@]} agent(s) in parallel..."
 echo ""
 
