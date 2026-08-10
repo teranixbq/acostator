@@ -14,6 +14,9 @@ import type { Env } from "../lib/db.ts";
 import { createDb } from "../lib/db.ts";
 import { type AuthVariables, requireAuth } from "../middleware/auth.ts";
 import { completeUpload, initUpload, storeUploadedFile } from "../services/csv-upload.ts";
+import { categoryRoutes } from "./categories.ts";
+import { exportRoutes } from "./export.ts";
+import { rowRoutes } from "./rows.ts";
 
 type Variables = AuthVariables;
 
@@ -42,7 +45,7 @@ projectRoutes.get("/", zValidator("query", PaginationSchema), async (c) => {
       updated_at: projects.updated_at,
       annotated_rows: sql<number>`(
         SELECT COUNT(*) FROM dataset_rows
-        WHERE dataset_rows.project_id = ${projects.id}
+        WHERE dataset_rows.project_id = projects.id
         AND dataset_rows.status = 'completed'
       )`,
     })
@@ -291,3 +294,12 @@ projectRoutes.post(
     return c.json({ data: updated });
   }
 );
+
+// Mount sub-routers inside projectRoutes so all /projects/* paths are resolved
+// by a single top-level app.route("/projects", projectRoutes) call.
+// Hono strips only static prefixes in app.route(); mounting here lets Hono
+// correctly match /:projectId/rows, /:projectId/categories, and /:projectId/export
+// without conflicting with the upload routes above.
+projectRoutes.route("/:projectId/rows", rowRoutes);
+projectRoutes.route("/:projectId/categories", categoryRoutes);
+projectRoutes.route("/", exportRoutes);

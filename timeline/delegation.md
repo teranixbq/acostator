@@ -39,11 +39,14 @@ After finishing, mark it done. This prevents two agents working on the same file
 
 | Group | Tasks | Status | Agent | Branch | Dependencies |
 |---|---|---|---|---|---|
-| A | 001 — random queue bug fix | FREE | — | — | none |
-| B | 002 — csv upload backend + export backend | FREE | — | — | none |
-| C | 004 — quadruple annotation form | FREE | — | — | none |
-| D | 003 — project UI + csv upload frontend + export buttons | FREE | — | — | B must be DONE |
-| E | 006 — testing setup | FREE | — | — | A + B + C + D must be DONE |
+| A | 001 — random queue bug fix | DONE | agent-a | random-queue-bug | none |
+| B | 002 — csv upload backend + export backend | DONE | agent-b | csv-upload-and-export-backend | none |
+| C | 004 — quadruple annotation form | DONE | agent-c | quadruple-form | none |
+| D | 003 — project UI + csv upload frontend + export buttons | DONE | agent-d | project-ui-csv-frontend | B must be DONE |
+| E | 006 — testing setup | DONE | agent-e | testing-setup | A + B + C + D must be DONE |
+| F | 007 — modal centering + annotation_order move to project detail | DONE | agent-f | modal-annotation-order-fix | none |
+| G | 008 — upload modal auto-open fix, centering, annotate button disabled | DONE | agent-g | upload-modal-fixes | none |
+| H | 009 — fix upload route 404 (Hono routing conflict) | DONE | agent-h | upload-route-fix | none |
 
 ---
 
@@ -85,7 +88,12 @@ Change your row status to `DONE` and add a row to the Completed Groups table.
 
 ## Completed Groups
 
-_(none yet)_
-
 | Group | Tasks | Branch | Agent | Date |
 |---|---|---|---|---|
+| A | 001 — random queue bug fix | random-queue-bug | agent-a | Aug 2026 |
+| B | 002 — csv upload backend + export backend | csv-upload-and-export-backend | agent-b | Aug 2026 |
+| C | 004 — quadruple annotation form | quadruple-form | agent-c | Aug 2026 |
+| D | 003 — project UI + csv upload frontend + export buttons | project-ui-csv-frontend | agent-d | Aug 2026 |
+| E | 006 — testing setup | testing-setup | agent-e | Aug 2026 |
+| F | 007 — modal centering + annotation_order move to project detail | modal-annotation-order-fix | agent-f | Aug 2026 |
+| G | 008 — upload modal auto-open fix, centering, annotate button disabled | upload-modal-fixes | agent-g | Aug 2026 |
