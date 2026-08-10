@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import type { Env } from "./lib/db.ts";
+import { annotationRoutes } from "./routes/annotations.ts";
 import { authRoutes } from "./routes/auth.ts";
 import { projectRoutes } from "./routes/projects.ts";
 
@@ -28,6 +29,7 @@ app.get("/health", (c) => c.json({ ok: true, env: c.env.ENVIRONMENT }));
 // Routes
 app.route("/auth", authRoutes);
 app.route("/projects", projectRoutes);
+app.route("/projects", annotationRoutes);
 
 // 404 fallback
 app.notFound((c) => {
