@@ -32,11 +32,10 @@ export function ProjectsPage() {
       .finally(() => setLoading(false));
   }, []);
 
-  // Called when CreateProjectModal succeeds — prepend + immediately open upload
+  // Called when CreateProjectModal succeeds — prepend to list, user opens upload manually
   const handleProjectCreated = (project: Project) => {
     setProjects((prev) => [project, ...prev]);
     setShowCreateModal(false);
-    setUploadProjectId(project.id);
   };
 
   // Called when UploadCSVModal finishes uploading
@@ -130,12 +129,23 @@ export function ProjectsPage() {
                       Export CSV
                     </a>
 
-                    <Link
-                      to={`/projects/${project.id}/annotate`}
-                      className="rounded-lg border border-gray-200 px-3 py-1.5 text-sm hover:bg-gray-50"
-                    >
-                      Annotate
-                    </Link>
+                    {project.total_rows === 0 ? (
+                      <button
+                        type="button"
+                        disabled
+                        title="Upload CSV first"
+                        className="rounded-lg border border-gray-200 px-3 py-1.5 text-sm opacity-50 cursor-not-allowed"
+                      >
+                        Annotate
+                      </button>
+                    ) : (
+                      <Link
+                        to={`/projects/${project.id}/annotate`}
+                        className="rounded-lg border border-gray-200 px-3 py-1.5 text-sm hover:bg-gray-50"
+                      >
+                        Annotate
+                      </Link>
+                    )}
                     <Link
                       to={`/projects/${project.id}`}
                       className="rounded-lg border border-gray-200 px-3 py-1.5 text-sm hover:bg-gray-50"
