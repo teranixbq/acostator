@@ -108,7 +108,7 @@ npx wrangler versions deploy <new-version-id>@100 --yes
 
 ---
 
-## Current State (per 2026-08-09)
+## Current State (per 2026-08-10)
 
 ### Selesai
 - Monorepo setup, D1 migration applied
@@ -117,8 +117,57 @@ npx wrangler versions deploy <new-version-id>@100 --yes
 - CORS bekerja untuk semua subdomain `apicode.my.id`
 - Route `/projects`, `/projects/:id/rows`, `/projects/:id/categories` terdaftar
 - Frontend pages: login, projects list, annotate
+- GitHub Actions CI pipeline (`ci.yml`) — lint, typecheck, test per PR ke `development`
+- GitHub ruleset di `development` — require CI pass sebelum merge
+- Random queue bug fix — `rows.ts` pop `row_index` dari queue saat complete/skip
+- CSV upload backend — presigned URL ke R2, streaming parse + batch insert 500 rows/tx
+- Export backend — export annotations ke CSV/JSON
+- Quadruple annotation form — `TextHighlighter`, `CategoryPicker`, `QuadrupleForm`
+- Project UI + CSV upload frontend — `CreateProjectModal`, `UploadCSVModal`, export buttons (in progress, Group D agent)
+
+### Sedang Dikerjakan
+- Group D agent (`wM` `FE-project-ui`) — Project UI: CreateProjectModal, UploadCSVModal, export buttons
 
 ### Belum Selesai
-- Tombol "New project" belum implement modal create project
-- Upload CSV dataset belum implement
+- Testing setup (Group E) — menunggu Group D selesai
 - Annotate page belum ditest end-to-end
+
+---
+
+### 6. CI typecheck gagal: tsc project references conflict
+
+**Masalah**: Root `tsconfig.json` pakai `references` ke `apps/worker` dan `apps/web`, tapi script typecheck root pakai `tsc --noEmit --project tsconfig.json`. TypeScript tidak mengizinkan `--noEmit` bersamaan dengan project references mode.
+
+**Fix**: Ubah script `typecheck` di root `package.json` dari `tsc --noEmit --project tsconfig.json` menjadi `npm run typecheck --workspaces --if-present` — typecheck jalan per workspace masing-masing.
+
+**Files**: `package.json`
+
+---
+
+### 7. CI typecheck gagal: packages/shared dist tidak ada
+
+**Masalah**: `apps/worker/tsconfig.json` punya `references` ke `../../packages/shared`, yang mengharapkan `packages/shared/dist/` sudah di-build. Di CI (fresh checkout), `dist/` tidak ada karena `npm ci` tidak build packages.
+
+**Fix**: Hapus `references` dari `apps/worker/tsconfig.json`. `packages/shared` sudah resolve via `exports` field di `package.json` (`"types": "./src/index.ts"`), jadi TypeScript bisa resolve langsung dari source tanpa build.
+
+**Files**: `apps/worker/tsconfig.json`
+
+---
+
+### 8. CI test gagal: vitest no test files found
+
+**Masalah**: `apps/worker` belum punya test files, tapi vitest exit code 1 kalau tidak ada test yang ditemukan. CI gagal di step test.
+
+**Fix**: Tambah flag `--passWithNoTests` ke script test di `apps/worker/package.json`. Test files akan dibuat oleh Group E agent setelah semua fitur selesai.
+
+**Files**: `apps/worker/package.json`
+
+---
+
+### 9. Biome lint errors di agent branches
+
+**Masalah**: Agent-agent yang di-spawn menulis code dengan format/lint yang tidak sesuai Biome rules. Error muncul di CI setelah PR dibuat.
+
+**Fix**: Jalankan `npx biome check --write --unsafe .` di worktree branch agent sebelum push. Semua errors auto-fixable. Error yang tidak auto-fixable (`noArrayIndexKey`, missing required fields di interface) di-fix manual.
+
+**Files**: Berbagai file di `apps/web/src/` dan `apps/worker/src/`

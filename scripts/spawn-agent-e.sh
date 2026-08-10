@@ -28,13 +28,9 @@ log "Fetching origin/development..."
 git -C "$REPO_ROOT" fetch origin development
 ok "Fetched"
 
-if [[ -d "$WORKTREE" ]]; then
-  git -C "$REPO_ROOT" worktree remove --force "$WORKTREE" 2>/dev/null || true
-fi
+# Remove existing worktree/branch if any
+git -C "$REPO_ROOT" worktree remove --force "$WORKTREE" 2>/dev/null || true
 git -C "$REPO_ROOT" branch -D "$BRANCH" 2>/dev/null || true
-
-git -C "$REPO_ROOT" worktree add -b "$BRANCH" "$WORKTREE" "$BASE_BRANCH"
-ok "Worktree created at $WORKTREE (base: $BASE_BRANCH)"
 
 TASK_CONTENT=$(cat "$REPO_ROOT/$TASK_FILE")
 PROMPT="You are a coding agent working on the Acostator project (ACOS annotation tool).
@@ -49,8 +45,9 @@ CRITICAL RULES:
 3. When done: run 'git push -u origin $BRANCH' to push your branch
 4. Do NOT merge into development yourself — manager reviews and merges
 5. Do NOT touch timeline/delegation.md — manager manages that file
-6. Rename your task file: TODO. → WIP. when starting, WIP. → DONE. when done
+6. Rename your task file: TODO. -> WIP. when starting, WIP. -> DONE. when done
 7. Run 'npm run lint' and 'npm run typecheck' before pushing — fix all errors
+8. /tmp/acostator-worktrees/ and /tmp/opencode/ are pre-approved — no need to ask permission
 
 All features are already implemented and merged into development:
 - random queue bug fix (rows.ts)
@@ -65,13 +62,28 @@ Read AGENT.md at the repo root first for full project context.
 YOUR TASK:
 $TASK_CONTENT"
 
-WS_RESULT=$(herdr workspace create --label "$LABEL" 2>&1)
-WS_ID=$(echo "$WS_RESULT" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d['result']['workspace_id'])")
-ok "Created workspace: $WS_ID ($LABEL)"
+# Use herdr worktree create — same pattern as spawn-agents.sh
+WS_RESULT=$(herdr worktree create \
+  --cwd "$REPO_ROOT" \
+  --branch "$BRANCH" \
+  --base "$BASE_BRANCH" \
+  --path "$WORKTREE" \
+  --label "$LABEL" \
+  --no-focus 2>&1)
 
-herdr send-keys "$WS_ID:p1" "cd $WORKTREE && opencode" Enter
+WS_ID=$(echo "$WS_RESULT" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d['result']['workspace']['workspace_id'])")
+ok "Created workspace: $WS_ID ($LABEL) at $WORKTREE"
+
+# Wait for pane shell to be ready
 sleep 3
-herdr agent send-text "$WS_ID:p1" "$PROMPT"
+
+# Start opencode agent
+agent_name=$(echo "$LABEL" | tr '[:upper:]' '[:lower:]' | tr '/' '-')
+herdr agent start "$agent_name" --kind opencode --pane "$WS_ID:p1" --timeout 30000
+ok "OpenCode started: $agent_name"
+
+# Send the task prompt
+herdr agent prompt "$WS_ID:p1" "$PROMPT"
 ok "Task sent to agent: $LABEL"
 
 log ""
