@@ -42,7 +42,7 @@ projectRoutes.get("/", zValidator("query", PaginationSchema), async (c) => {
       updated_at: projects.updated_at,
       annotated_rows: sql<number>`(
         SELECT COUNT(*) FROM dataset_rows
-        WHERE dataset_rows.project_id = ${projects.id}
+        WHERE dataset_rows.project_id = projects.id
         AND dataset_rows.status = 'completed'
       )`,
     })

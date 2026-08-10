@@ -1,0 +1,22 @@
+name = "acostator"
+main = "src/index.ts"
+compatibility_date = "2024-12-18"
+compatibility_flags = ["nodejs_compat"]
+
+[[d1_databases]]
+binding = "DB"
+database_name = "acostator"
+database_id = "ba595437-9cac-4cf1-a441-9a85d75c01fe"
+migrations_dir = "./src/db/migrations"
+
+[[r2_buckets]]
+binding = "BUCKET"
+bucket_name = "acostatorbq"
+
+[vars]
+ENVIRONMENT = "test"
+ALLOWED_DOMAIN = "example.com"
+GITHUB_CLIENT_ID = "test-client-id"
+GITHUB_CLIENT_SECRET = "test-client-secret"
+AUTH_SECRET = "test-auth-secret-that-is-long-enough"
+FRONTEND_URL = "https://example.com"
