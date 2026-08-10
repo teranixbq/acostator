@@ -74,9 +74,20 @@ export const CategoryParamsSchema = z.object({
 export const UploadInitSchema = z.object({
   file_name: z.string().min(1),
   file_size: z.number().positive(),
+  text_column: z.string().min(1),
 });
 
 export const UploadCompleteSchema = z.object({ upload_id: z.string().uuid() });
+
+// --- Annotation ---
+
+export const AnnotationCreateSchema = z.object({
+  row_index: z.number().int().nonnegative(),
+  aspect: z.string().min(1),
+  category: z.string().min(1),
+  opinion: z.string().min(1),
+  sentiment: z.enum(["positive", "negative", "neutral", "mixed"]),
+});
 
 // --- Pagination ---
 
@@ -93,3 +104,4 @@ export type CreateCategoryInput = z.infer<typeof CreateCategorySchema>;
 export type PaginationInput = z.infer<typeof PaginationSchema>;
 export type UploadInitInput = z.infer<typeof UploadInitSchema>;
 export type UploadCompleteInput = z.infer<typeof UploadCompleteSchema>;
+export type AnnotationCreateInput = z.infer<typeof AnnotationCreateSchema>;
