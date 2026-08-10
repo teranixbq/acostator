@@ -43,7 +43,7 @@ After finishing, mark it done. This prevents two agents working on the same file
 | B | 002 — csv upload backend + export backend | FREE | — | — | none |
 | C | 004 — quadruple annotation form | FREE | — | — | none |
 | D | 003 — project UI + csv upload frontend + export buttons | DONE | kiro | project-ui-csv-frontend | B must be DONE |
-| E | 006 — testing setup | FREE | — | — | A + B + C + D must be DONE |
+| E | 006 — testing setup | RUNNING | kiro | testing-setup | A + B + C + D must be DONE |
 
 ---
 
