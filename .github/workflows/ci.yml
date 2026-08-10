@@ -3,11 +3,17 @@ name: CI
 on:
   pull_request:
     branches: ["development", "main"]
+    paths-ignore:
+      - "docs/**"
+      - "*.md"
+      - "timeline/**"
 
 jobs:
   ci:
     name: Lint, Typecheck, Test
     runs-on: ubuntu-latest
+    # Skip CI entirely if PR is from setup-docs branch
+    if: github.head_ref != 'setup-docs'
 
     steps:
       - name: Checkout
