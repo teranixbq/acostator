@@ -7,7 +7,7 @@
 #   Agent B — 002 csv-upload + export  → branch: csv-upload-export-backend
 #   Agent C — 004 quadruple-form       → branch: quadruple-form
 #
-# After batch 1 is done, run manually:
+# After batch 1 is done, run:
 #   bash scripts/spawn-agent-d.sh   (Group D — depends on B)
 #   bash scripts/spawn-agent-e.sh   (Group E — depends on A+B+C+D)
 #
@@ -44,17 +44,8 @@ for agent in "${AGENTS[@]}"; do
   log "Setting up agent: $label (branch: $branch)"
 
   # Remove existing worktree if any
-  if [[ -d "$worktree" ]]; then
-    git -C "$REPO_ROOT" worktree remove --force "$worktree" 2>/dev/null || true
-    warn "  Removed existing worktree: $worktree"
-  fi
-
-  # Delete local branch if exists
+  git -C "$REPO_ROOT" worktree remove --force "$worktree" 2>/dev/null || true
   git -C "$REPO_ROOT" branch -D "$branch" 2>/dev/null || true
-
-  # Create worktree with new branch from development
-  git -C "$REPO_ROOT" worktree add -b "$branch" "$worktree" "$BASE_BRANCH"
-  ok "  Worktree created at $worktree (base: $BASE_BRANCH)"
 
   # Build the task prompt
   TASK_CONTENT=$(cat "$REPO_ROOT/$task_file")
@@ -70,32 +61,42 @@ CRITICAL RULES:
 3. When done: run 'git push -u origin $branch' to push your branch
 4. Do NOT merge into development yourself — manager reviews and merges
 5. Do NOT touch timeline/delegation.md — manager manages that file
-6. Rename your task file: TODO. → WIP. when starting, WIP. → DONE. when done
+6. Rename your task file: TODO. -> WIP. when starting, WIP. -> DONE. when done
 7. Run 'npm run lint' and 'npm run typecheck' before pushing — fix all errors
+8. /tmp/acostator-worktrees/ and /tmp/opencode/ are pre-approved — no need to ask permission
 
 Read AGENT.md at the repo root first for full project context.
 
 YOUR TASK:
 $TASK_CONTENT"
 
-  # Create new herdr workspace
-  WS_RESULT=$(herdr workspace create --label "$label" 2>&1)
-  WS_ID=$(echo "$WS_RESULT" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d['result']['workspace_id'])")
-  ok "  Created workspace: $WS_ID ($label)"
+  # Use herdr worktree create — handles git worktree + workspace in one command
+  WS_RESULT=$(herdr worktree create \
+    --cwd "$REPO_ROOT" \
+    --branch "$branch" \
+    --base "$BASE_BRANCH" \
+    --path "$worktree" \
+    --label "$label" \
+    --no-focus 2>&1)
 
-  # Launch opencode in the worktree
-  herdr send-keys "$WS_ID:p1" "cd $worktree && opencode" Enter
-  sleep 3
+  WS_ID=$(echo "$WS_RESULT" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d['result']['workspace']['workspace_id'])")
+  ok "  Created workspace: $WS_ID ($label) at $worktree"
+
+  # Start opencode agent (name must be lowercase, no uppercase)
+  agent_name=$(echo "$label" | tr '[:upper:]' '[:lower:]' | tr '/' '-')
+  herdr agent start "$agent_name" --kind opencode --pane "$WS_ID:p1" --timeout 30000
+  ok "  OpenCode started: $agent_name"
 
   # Send the task prompt
-  herdr agent send-text "$WS_ID:p1" "$PROMPT"
-  ok "  Task sent to agent: $label"
+  herdr agent prompt "$WS_ID:p1" "$PROMPT"
+  ok "  Task sent to: $label"
 
   echo ""
 done
 
 echo ""
-log "Batch 1 spawned: 3 agents running in parallel"
-log "Monitor: herdr agent list 2>&1 | python3 -c \"import sys,json; d=json.load(sys.stdin); [print(a['pane_id'], a.get('agent_status','?'), a.get('terminal_title_stripped','')[:50]) for a in d['result']['agents']]\""
+log "Batch 1 spawned: 3 agents (A, B, C) running in parallel"
+log "Monitor agents:"
+log "  herdr agent list 2>&1 | python3 -c \"import sys,json; d=json.load(sys.stdin); [print(a['pane_id'], a.get('agent_status','?'), a.get('terminal_title_stripped','')[:50]) for a in d['result']['agents']]\""
 log ""
-log "When all 3 are done, run: bash scripts/spawn-agent-d.sh"
+log "When all 3 agents are done (idle), run: bash scripts/spawn-agent-d.sh"

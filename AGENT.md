@@ -4,6 +4,17 @@ This document is mandatory reading for any AI agent working on the Acostator cod
 
 ---
 
+## Filesystem Access
+
+Your working directory is a git worktree under `/tmp/acostator-worktrees/<branch>/`.
+You have full read/write access to:
+- `/tmp/acostator-worktrees/` — your worktree (this is your repo root)
+- `/tmp/opencode/` — scratch space for temporary files during work
+
+Both directories are pre-approved. Do NOT ask for permission to access them.
+
+---
+
 ## Core Principles
 
 1. **Read first, write second.** Before creating or editing any file, read the relevant files first.
