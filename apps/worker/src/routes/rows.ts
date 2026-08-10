@@ -77,7 +77,7 @@ rowRoutes.get(
 
       // Find the first queued index whose row is still pending/in_progress
       // (idempotent: skips any entries already completed or skipped)
-      let nextRow: (typeof datasetRows.$inferSelect) | undefined;
+      let nextRow: typeof datasetRows.$inferSelect | undefined;
       for (const idx of queue) {
         const [candidate] = await db
           .select()
