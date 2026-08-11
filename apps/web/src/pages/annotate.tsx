@@ -164,6 +164,10 @@ export function AnnotatePage() {
     goTo(currentIndex + 1);
   }
 
+  function goPrevious() {
+    goTo(currentIndex - 1);
+  }
+
   // -------------------------------------------------------------------------
   // Local annotation state — reset on row change
   // -------------------------------------------------------------------------
@@ -171,11 +175,16 @@ export function AnnotatePage() {
   const [pendingAnnotations, setPendingAnnotations] = useState<LocalAnnotation[]>([]);
   const [editingAnnotation, setEditingAnnotation] = useState<LocalAnnotation | null>(null);
 
-  // Reset pending list and edit state when navigating to a new row
+  // Form open by default when there are no annotations yet for this row;
+  // collapsed after the first annotation is added.
+  const [isFormOpen, setIsFormOpen] = useState(true);
+
+  // Reset pending list, edit state, and form visibility when navigating to a new row
   // biome-ignore lint/correctness/useExhaustiveDependencies: reset on row change only
   useEffect(() => {
     setPendingAnnotations([]);
     setEditingAnnotation(null);
+    setIsFormOpen(true);
   }, [currentIndex]);
 
   function handleAnnotationAdded(annotation: LocalAnnotation) {
@@ -477,21 +486,33 @@ export function AnnotatePage() {
         projectId={projectId ?? ""}
         rowText={currentRow.text}
         existingQuadruples={pendingAsQuadruples as never}
+        isFormOpen={isFormOpen}
+        onOpenForm={() => setIsFormOpen(true)}
+        onCloseForm={() => setIsFormOpen(false)}
         editingQuadruple={editingAnnotation}
         onAdd={handleAnnotationAdded}
         onUpdate={handleAnnotationUpdated}
         onCancelEdit={handleCancelEdit}
       />
 
-      {/* Actions — Complete only, no Prev/Next */}
+      {/* Actions */}
       <div className="flex items-center gap-3">
+        <button
+          type="button"
+          onClick={goPrevious}
+          disabled={currentIndex === 0 || saving}
+          className="rounded-lg border border-gray-200 px-4 py-2.5 text-sm hover:bg-gray-50 disabled:opacity-40"
+        >
+          ← Previous
+        </button>
+
         <button
           type="button"
           onClick={() => void handleSkip()}
           disabled={saving}
           className="rounded-lg border border-gray-200 px-4 py-2.5 text-sm hover:bg-gray-50 disabled:opacity-50"
         >
-          Skip
+          Skip →
         </button>
 
         <button

@@ -12,6 +12,12 @@ interface QuadrupleFormProps {
   projectId: string;
   rowText: string;
   existingQuadruples: Quadruple[];
+  /** Controls whether the form body is visible. */
+  isFormOpen: boolean;
+  /** Called when the user clicks "+ Add annotation" to open the form. */
+  onOpenForm: () => void;
+  /** Called after a successful add to collapse the form. */
+  onCloseForm: () => void;
   /** If set, the form is in edit mode — fields are pre-populated. */
   editingQuadruple?: LocalAnnotation | null;
   onAdd: (annotation: LocalAnnotation) => void;
@@ -51,6 +57,9 @@ export function QuadrupleForm({
   projectId,
   rowText,
   existingQuadruples,
+  isFormOpen,
+  onOpenForm,
+  onCloseForm,
   editingQuadruple,
   onAdd,
   onUpdate,
@@ -170,6 +179,7 @@ export function QuadrupleForm({
     } else {
       onAdd(annotation);
       resetForm();
+      onCloseForm();
     }
   }
 
@@ -180,192 +190,222 @@ export function QuadrupleForm({
     sentiment !== null;
 
   return (
-    <form
-      onSubmit={(e) => e.preventDefault()}
-      className="space-y-5 rounded-xl border border-gray-200 bg-white p-5"
-    >
-      <div className="flex items-center justify-between">
-        <h3 className="text-sm font-semibold text-gray-900">
-          {isEditing ? "Edit annotation" : "New annotation"}
-        </h3>
-        {isEditing && (
-          <button
-            type="button"
-            onClick={onCancelEdit}
-            className="text-xs text-gray-400 hover:text-gray-600"
-          >
-            Cancel edit
-          </button>
-        )}
-      </div>
+    <div className="space-y-3">
+      {/* Collapsible form card — only visible when isFormOpen or editing */}
+      {(isFormOpen || isEditing) && (
+        <form
+          onSubmit={(e) => e.preventDefault()}
+          className="space-y-5 rounded-xl border border-gray-200 bg-white p-5"
+        >
+          <div className="flex items-center justify-between">
+            <h3 className="text-sm font-semibold text-gray-900">
+              {isEditing ? "Edit annotation" : "New annotation"}
+            </h3>
+            {isEditing ? (
+              <button
+                type="button"
+                onClick={onCancelEdit}
+                className="text-xs text-gray-400 hover:text-gray-600"
+              >
+                Cancel edit
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={onCloseForm}
+                className="text-xs text-gray-400 hover:text-gray-600"
+              >
+                ✕ Close
+              </button>
+            )}
+          </div>
 
-      {/* Text highlighter — shared for aspect and opinion */}
-      <div className="space-y-2">
-        <div className="flex gap-2">
-          <button
-            type="button"
-            onClick={() => setHighlightTarget("aspect")}
-            disabled={aspectImplicit}
-            className={`rounded-md px-3 py-1.5 text-xs font-medium transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${
-              highlightTarget === "aspect"
-                ? "bg-blue-100 text-blue-800 ring-1 ring-blue-300"
-                : "bg-gray-100 text-gray-600 hover:bg-gray-200"
-            }`}
-          >
-            Selecting: Aspect
-          </button>
-          <button
-            type="button"
-            onClick={() => setHighlightTarget("opinion")}
-            disabled={opinionImplicit}
-            className={`rounded-md px-3 py-1.5 text-xs font-medium transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${
-              highlightTarget === "opinion"
-                ? "bg-emerald-100 text-emerald-800 ring-1 ring-emerald-300"
-                : "bg-gray-100 text-gray-600 hover:bg-gray-200"
-            }`}
-          >
-            Selecting: Opinion
-          </button>
-        </div>
+          {/* Text highlighter — shared for aspect and opinion */}
+          <div className="space-y-2">
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => setHighlightTarget("aspect")}
+                disabled={aspectImplicit}
+                className={`rounded-md px-3 py-1.5 text-xs font-medium transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${
+                  highlightTarget === "aspect"
+                    ? "bg-blue-100 text-blue-800 ring-1 ring-blue-300"
+                    : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                }`}
+              >
+                Selecting: Aspect
+              </button>
+              <button
+                type="button"
+                onClick={() => setHighlightTarget("opinion")}
+                disabled={opinionImplicit}
+                className={`rounded-md px-3 py-1.5 text-xs font-medium transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${
+                  highlightTarget === "opinion"
+                    ? "bg-emerald-100 text-emerald-800 ring-1 ring-emerald-300"
+                    : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                }`}
+              >
+                Selecting: Opinion
+              </button>
+            </div>
 
-        <TextHighlighter
-          text={rowText}
-          onSelect={handleTextSelect}
-          existingQuadruples={existingQuadruples}
-          aspectSpan={aspectSpan}
-          opinionSpan={opinionSpan}
-          label="Row text"
-        />
-      </div>
-
-      {/* Aspect term */}
-      <div className="space-y-1.5">
-        <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">Aspect term</p>
-        <div className="flex items-center gap-3">
-          <span
-            className={`flex-1 rounded-lg border px-3 py-2 text-sm ${
-              aspectSpan && !aspectImplicit
-                ? "border-blue-200 bg-blue-50 text-blue-900"
-                : "border-gray-200 bg-gray-50 text-gray-400"
-            }`}
-          >
-            {aspectImplicit ? "Implicit" : aspectSpan ? aspectSpan.text : "Highlight text above..."}
-          </span>
-          <label className="flex items-center gap-1.5 text-xs text-gray-500 cursor-pointer select-none">
-            <input
-              type="checkbox"
-              checked={aspectImplicit}
-              onChange={(e) => {
-                setAspectImplicit(e.target.checked);
-                if (e.target.checked) {
-                  setAspectSpan(null);
-                  setHighlightTarget("opinion");
-                }
-              }}
-              className="rounded"
+            <TextHighlighter
+              text={rowText}
+              onSelect={handleTextSelect}
+              existingQuadruples={existingQuadruples}
+              aspectSpan={aspectSpan}
+              opinionSpan={opinionSpan}
+              label="Row text"
             />
-            Implicit
-          </label>
-          {aspectSpan && !aspectImplicit && (
+          </div>
+
+          {/* Aspect term */}
+          <div className="space-y-1.5">
+            <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">Aspect term</p>
+            <div className="flex items-center gap-3">
+              <span
+                className={`flex-1 rounded-lg border px-3 py-2 text-sm ${
+                  aspectSpan && !aspectImplicit
+                    ? "border-blue-200 bg-blue-50 text-blue-900"
+                    : "border-gray-200 bg-gray-50 text-gray-400"
+                }`}
+              >
+                {aspectImplicit
+                  ? "Implicit"
+                  : aspectSpan
+                    ? aspectSpan.text
+                    : "Highlight text above..."}
+              </span>
+              <label className="flex items-center gap-1.5 text-xs text-gray-500 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={aspectImplicit}
+                  onChange={(e) => {
+                    setAspectImplicit(e.target.checked);
+                    if (e.target.checked) {
+                      setAspectSpan(null);
+                      setHighlightTarget("opinion");
+                    }
+                  }}
+                  className="rounded"
+                />
+                Implicit
+              </label>
+              {aspectSpan && !aspectImplicit && (
+                <button
+                  type="button"
+                  onClick={() => setAspectSpan(null)}
+                  className="text-xs text-gray-400 hover:text-gray-600"
+                  aria-label="Clear aspect selection"
+                >
+                  Clear
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* Category */}
+          <CategoryPicker projectId={projectId} value={category} onChange={setCategory} />
+
+          {/* Opinion term */}
+          <div className="space-y-1.5">
+            <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">
+              Opinion term
+            </p>
+            <div className="flex items-center gap-3">
+              <span
+                className={`flex-1 rounded-lg border px-3 py-2 text-sm ${
+                  opinionSpan && !opinionImplicit
+                    ? "border-emerald-200 bg-emerald-50 text-emerald-900"
+                    : "border-gray-200 bg-gray-50 text-gray-400"
+                }`}
+              >
+                {opinionImplicit
+                  ? "Implicit"
+                  : opinionSpan
+                    ? opinionSpan.text
+                    : "Highlight text above..."}
+              </span>
+              <label className="flex items-center gap-1.5 text-xs text-gray-500 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={opinionImplicit}
+                  onChange={(e) => {
+                    setOpinionImplicit(e.target.checked);
+                    if (e.target.checked) {
+                      setOpinionSpan(null);
+                      setHighlightTarget("aspect");
+                    }
+                  }}
+                  className="rounded"
+                />
+                Implicit
+              </label>
+              {opinionSpan && !opinionImplicit && (
+                <button
+                  type="button"
+                  onClick={() => setOpinionSpan(null)}
+                  className="text-xs text-gray-400 hover:text-gray-600"
+                  aria-label="Clear opinion selection"
+                >
+                  Clear
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* Sentiment */}
+          <div className="space-y-1.5">
+            <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">Sentiment</p>
+            <div className="flex flex-wrap gap-4">
+              {SENTIMENTS.map(({ value, label, color }) => (
+                <label key={value} className="flex items-center gap-1.5 cursor-pointer">
+                  <input
+                    type="radio"
+                    name="sentiment"
+                    value={value}
+                    checked={sentiment === value}
+                    onChange={() => setSentiment(value)}
+                    className="accent-gray-900"
+                  />
+                  <span className={`text-sm ${color}`}>{label}</span>
+                </label>
+              ))}
+            </div>
+          </div>
+
+          {error && <p className="text-xs text-red-500">{error}</p>}
+
+          <div className="flex gap-3">
             <button
               type="button"
-              onClick={() => setAspectSpan(null)}
-              className="text-xs text-gray-400 hover:text-gray-600"
-              aria-label="Clear aspect selection"
+              onClick={handleSubmit}
+              disabled={!isValid}
+              className="rounded-lg bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-700 disabled:opacity-40 disabled:cursor-not-allowed"
             >
-              Clear
+              {isEditing ? "Save changes" : "Add annotation"}
             </button>
-          )}
-        </div>
-      </div>
-
-      {/* Category */}
-      <CategoryPicker projectId={projectId} value={category} onChange={setCategory} />
-
-      {/* Opinion term */}
-      <div className="space-y-1.5">
-        <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">Opinion term</p>
-        <div className="flex items-center gap-3">
-          <span
-            className={`flex-1 rounded-lg border px-3 py-2 text-sm ${
-              opinionSpan && !opinionImplicit
-                ? "border-emerald-200 bg-emerald-50 text-emerald-900"
-                : "border-gray-200 bg-gray-50 text-gray-400"
-            }`}
-          >
-            {opinionImplicit
-              ? "Implicit"
-              : opinionSpan
-                ? opinionSpan.text
-                : "Highlight text above..."}
-          </span>
-          <label className="flex items-center gap-1.5 text-xs text-gray-500 cursor-pointer select-none">
-            <input
-              type="checkbox"
-              checked={opinionImplicit}
-              onChange={(e) => {
-                setOpinionImplicit(e.target.checked);
-                if (e.target.checked) {
-                  setOpinionSpan(null);
-                  setHighlightTarget("aspect");
-                }
-              }}
-              className="rounded"
-            />
-            Implicit
-          </label>
-          {opinionSpan && !opinionImplicit && (
             <button
               type="button"
-              onClick={() => setOpinionSpan(null)}
-              className="text-xs text-gray-400 hover:text-gray-600"
-              aria-label="Clear opinion selection"
+              onClick={resetForm}
+              className="rounded-lg border border-gray-200 px-4 py-2 text-sm hover:bg-gray-50"
             >
-              Clear
+              Reset
             </button>
-          )}
-        </div>
-      </div>
+          </div>
+        </form>
+      )}
 
-      {/* Sentiment */}
-      <div className="space-y-1.5">
-        <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">Sentiment</p>
-        <div className="flex flex-wrap gap-4">
-          {SENTIMENTS.map(({ value, label, color }) => (
-            <label key={value} className="flex items-center gap-1.5 cursor-pointer">
-              <input
-                type="radio"
-                name="sentiment"
-                value={value}
-                checked={sentiment === value}
-                onChange={() => setSentiment(value)}
-                className="accent-gray-900"
-              />
-              <span className={`text-sm ${color}`}>{label}</span>
-            </label>
-          ))}
-        </div>
-      </div>
-
-      {error && <p className="text-xs text-red-500">{error}</p>}
-
-      <div className="flex gap-3">
+      {/* Always-visible button to open the form — hidden when form is already open or in edit mode */}
+      {!isFormOpen && !isEditing && (
         <button
           type="button"
-          onClick={handleSubmit}
-          disabled={!isValid}
-          className="rounded-lg bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-700 disabled:opacity-40 disabled:cursor-not-allowed"
+          onClick={onOpenForm}
+          className="w-full rounded-lg border border-dashed border-gray-300 px-4 py-2.5 text-sm text-gray-500 hover:border-gray-400 hover:text-gray-700 hover:bg-gray-50 transition-colors"
         >
-          {isEditing ? "Save changes" : "+ Add annotation"}
+          + Add annotation
         </button>
-        <button
-          type="button"
-          onClick={resetForm}
-          className="rounded-lg border border-gray-200 px-4 py-2 text-sm hover:bg-gray-50"
-        >
-          Reset
-        </button>
-      </div>
-    </form>
+      )}
+    </div>
   );
 }
