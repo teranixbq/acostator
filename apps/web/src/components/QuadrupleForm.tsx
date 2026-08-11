@@ -118,7 +118,9 @@ export function QuadrupleForm({
       resetForm();
     } catch (err: unknown) {
       if (err instanceof Error && err.message.includes("404")) {
-        setError("Endpoint not found (404). The annotation API may not be available yet — please wait for the backend to be deployed.");
+        setError(
+          "Endpoint not found (404). The annotation API may not be available yet — please wait for the backend to be deployed."
+        );
       } else {
         setError(err instanceof Error ? err.message : "Failed to add quadruple.");
       }
