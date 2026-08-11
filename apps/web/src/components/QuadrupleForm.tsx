@@ -72,8 +72,7 @@ export function QuadrupleForm({
     setError(null);
   }
 
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
+  async function handleSubmit() {
     setError(null);
 
     const aspectTerm = aspectImplicit ? "NULL" : (aspectSpan?.text ?? "");
@@ -118,7 +117,13 @@ export function QuadrupleForm({
       onAdd(res.data);
       resetForm();
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "Failed to add quadruple.");
+      if (err instanceof Error && err.message.includes("404")) {
+        setError(
+          "Endpoint not found (404). The annotation API may not be available yet — please wait for the backend to be deployed."
+        );
+      } else {
+        setError(err instanceof Error ? err.message : "Failed to add quadruple.");
+      }
     } finally {
       setSubmitting(false);
     }
@@ -132,7 +137,7 @@ export function QuadrupleForm({
 
   return (
     <form
-      onSubmit={(e) => void handleSubmit(e)}
+      onSubmit={(e) => e.preventDefault()}
       className="space-y-5 rounded-xl border border-gray-200 bg-white p-5"
     >
       <h3 className="text-sm font-semibold text-gray-900">Add quadruple</h3>
@@ -143,7 +148,8 @@ export function QuadrupleForm({
           <button
             type="button"
             onClick={() => setHighlightTarget("aspect")}
-            className={`rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
+            disabled={aspectImplicit}
+            className={`rounded-md px-3 py-1.5 text-xs font-medium transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${
               highlightTarget === "aspect"
                 ? "bg-blue-100 text-blue-800 ring-1 ring-blue-300"
                 : "bg-gray-100 text-gray-600 hover:bg-gray-200"
@@ -154,7 +160,8 @@ export function QuadrupleForm({
           <button
             type="button"
             onClick={() => setHighlightTarget("opinion")}
-            className={`rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
+            disabled={opinionImplicit}
+            className={`rounded-md px-3 py-1.5 text-xs font-medium transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${
               highlightTarget === "opinion"
                 ? "bg-green-100 text-green-800 ring-1 ring-green-300"
                 : "bg-gray-100 text-gray-600 hover:bg-gray-200"
@@ -193,7 +200,11 @@ export function QuadrupleForm({
               checked={aspectImplicit}
               onChange={(e) => {
                 setAspectImplicit(e.target.checked);
-                if (e.target.checked) setAspectSpan(null);
+                if (e.target.checked) {
+                  setAspectSpan(null);
+                  // Switch highlight target away so the user isn't stuck on a disabled field
+                  setHighlightTarget("opinion");
+                }
               }}
               className="rounded"
             />
@@ -238,7 +249,11 @@ export function QuadrupleForm({
               checked={opinionImplicit}
               onChange={(e) => {
                 setOpinionImplicit(e.target.checked);
-                if (e.target.checked) setOpinionSpan(null);
+                if (e.target.checked) {
+                  setOpinionSpan(null);
+                  // Switch highlight target away so the user isn't stuck on a disabled field
+                  setHighlightTarget("aspect");
+                }
               }}
               className="rounded"
             />
@@ -281,7 +296,8 @@ export function QuadrupleForm({
 
       <div className="flex gap-3">
         <button
-          type="submit"
+          type="button"
+          onClick={() => void handleSubmit()}
           disabled={!isValid || submitting}
           className="rounded-lg bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-700 disabled:opacity-40 disabled:cursor-not-allowed"
         >

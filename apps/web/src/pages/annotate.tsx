@@ -429,8 +429,9 @@ export function AnnotatePage() {
         </div>
       )}
 
-      {/* Quadruple form */}
+      {/* Quadruple form — key forces full remount on row change, resetting all internal state */}
       <QuadrupleForm
+        key={currentIndex}
         projectId={projectId ?? ""}
         rowId={`local-${currentRow.row_index}`}
         rowText={currentRow.text}
