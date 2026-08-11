@@ -171,3 +171,78 @@ npx wrangler versions deploy <new-version-id>@100 --yes
 **Fix**: Jalankan `npx biome check --write --unsafe .` di worktree branch agent sebelum push. Semua errors auto-fixable. Error yang tidak auto-fixable (`noArrayIndexKey`, missing required fields di interface) di-fix manual.
 
 **Files**: Berbagai file di `apps/web/src/` dan `apps/worker/src/`
+
+---
+
+### 10. UNIQUE constraint 500 pada POST annotations
+
+**Masalah**: Saat user menyelesaikan sebuah row, navigasi balik, lalu complete lagi, `POST /projects/:id/annotations` mengembalikan 500. Kombinasi `(project_id, row_index, aspect_term, opinion_term)` sudah ada di D1.
+
+**Fix**: Ganti plain `INSERT` ke `INSERT OR REPLACE` (upsert) di route annotations. Re-submit row yang sama sekarang aman — record lama digantikan tanpa error.
+
+**Files**: `apps/worker/src/routes/annotations.ts`
+
+---
+
+### 11. Arsitektur baru: CSV tetap di R2, D1 hanya simpan quadruples
+
+**Masalah**: Upload CSV besar gagal dengan error "too many SQL variables" di D1. Batas SQLite adalah 32.766 bind parameters per statement — ribuan baris CSV melebihi batas ini meskipun di-batch.
+
+**Fix**: Hapus tabel `dataset_rows` sepenuhnya. CSV tetap di R2 secara permanen. Browser fetch CSV dari R2 sekali, parse secara lokal, cache di IndexedDB (`acostator-{projectId}`). Anotasi dikelola lokal-first (memory + IDB), di-sync ke D1 hanya saat user klik Complete.
+
+**Perubahan arsitektur**:
+- D1 hanya menyimpan: `users`, `projects`, `categories`, `annotations`
+- R2 menyimpan: file CSV asli (permanent)
+- Browser IndexedDB menyimpan: baris CSV parsed, progress, status row, anotasi pending
+- Field baru di project: `text_column` (kolom CSV yang dipilih user saat upload)
+- Migrasi: `0001_annotations`, `0002_annotation_status` sudah diterapkan ke D1 remote
+
+**Files**: `apps/worker/src/routes/projects.ts`, `apps/worker/src/db/schema.ts`, `apps/web/src/lib/indexeddb.ts`, `apps/web/src/pages/annotate.tsx`, `apps/web/src/components/UploadCSVModal.tsx`
+
+---
+
+### 12. Annotation sync flow: isDirty, syncStatus, Previous/Next/Complete
+
+**Masalah**: Setelah arsitektur lokal-first, butuh mekanisme untuk track apakah anotasi sudah di-sync ke server, dan mencegah data hilang saat navigasi.
+
+**Implementasi**:
+- `isDirty` — true jika ada perubahan lokal yang belum di-sync ke D1
+- `syncStatus` — `idle | syncing | synced | error` — ditampilkan sebagai indikator di UI
+- `isFormOpen` — form buka otomatis jika row belum punya anotasi
+- `handleNext` / `handlePrevious` — navigasi lokal, persist progress ke IDB
+- `handleComplete` — sync semua pending annotations ke D1 via POST (upsert), simpan ke IDB
+- Race condition fix: `useEffect` untuk load IDB tidak berlomba dengan `handlePrevious`
+
+**Files**: `apps/web/src/pages/annotate.tsx`
+
+---
+
+### 13. Highlight anotasi tersimpan tidak muncul di TextHighlighter
+
+**Masalah**: Saat membuka row yang sudah punya anotasi tersimpan, highlight span (overlay warna di teks) tidak muncul. Hanya seleksi aktif yang menampilkan warna.
+
+**Root cause**: `noServerQuadruples` di `annotate.tsx` selalu `[]` (hardcoded). Komentar lama mengklaim highlight datang dari state internal form — tapi form tidak punya mekanisme itu.
+
+**Fix**: Map `pendingAnnotations` ke `Quadruple[]` format untuk di-pass sebagai `existingQuadruples` ke `QuadrupleForm` → `TextHighlighter`.
+
+```ts
+const noServerQuadruples: Quadruple[] = pendingAnnotations.map((a) => ({
+  id: a.localId,
+  row_id: "",
+  project_id: projectId ?? "",
+  aspect_term: a.aspectTerm,
+  aspect_implicit: a.aspectImplicit,
+  aspect_start: a.aspectStart,
+  aspect_end: a.aspectEnd,
+  category_id: a.categoryId,
+  opinion_term: a.opinionTerm,
+  opinion_implicit: a.opinionImplicit,
+  opinion_start: a.opinionStart,
+  opinion_end: a.opinionEnd,
+  sentiment: a.sentiment,
+  created_at: "",
+  updated_at: "",
+}));
+```
+
+**Files**: `apps/web/src/pages/annotate.tsx`

@@ -1,90 +1,118 @@
 # Acostator — Common Issues & Solutions
 
-This document records problems encountered during development and the solutions applied. Add new entries as issues are discovered and resolved.
+## 1. D1 "Too Many SQL Variables" on CSV Upload
+
+**Problem**: When uploading a large CSV (thousands of rows), the worker tried to insert all rows into a `dataset_rows` D1 table in one transaction. D1 (SQLite) has a limit of 32,766 bind parameters per statement, causing a 500 error for any CSV with more than ~500 rows.
+
+**Root cause**: Each row insert required multiple columns (id, project_id, row_index, text, status, created_at, updated_at = 7 params). 500 rows × 7 params = 3,500 params — still under limit, but batching at 500 was fragile and the real solution was architectural.
+
+**Fix**: Removed `dataset_rows` table entirely. CSV stays in R2 permanently. Browser fetches CSV from R2 once, parses it locally, caches in IndexedDB. D1 only stores annotation quadruples (one row per quadruple, not per CSV row).
+
+**Files changed**: `apps/worker/src/routes/projects.ts`, `apps/worker/src/db/schema.ts`, migration `0001_annotations`
 
 ---
 
-## Issue 1: Upload Route 404 — Hono Routing Conflict
+## 2. UNIQUE Constraint 500 on POST Annotations
 
-**Symptom:** `POST /projects/:projectId/upload/init` returns `{"error":"Not found"}` 404 even though the route is defined inside `projectRoutes`.
+**Problem**: When a user completed a row, then navigated back and completed it again, `POST /projects/:id/annotations` returned 500 because the same `(project_id, row_index, aspect_term, opinion_term)` combination already existed in D1.
 
-**Root cause:**
+**Root cause**: The insert was a plain `INSERT`, not an upsert. Re-submitting the same row violated the UNIQUE constraint.
 
-Routes were mounted in `apps/worker/src/index.ts` like this:
+**Fix**: Changed to `INSERT OR REPLACE` (upsert) in `apps/worker/src/routes/annotations.ts`. Re-submitting the same annotation now silently replaces the existing record.
+
+**Files changed**: `apps/worker/src/routes/annotations.ts`
+
+---
+
+## 3. Existing Annotation Highlights Not Shown in TextHighlighter
+
+**Problem**: When a user opened a row that already had saved annotations, the text highlights (colored span overlays) did not appear. Only the active selection (aspect/opinion being picked) showed colors.
+
+**Root cause**: In `apps/web/src/pages/annotate.tsx`, the prop `existingQuadruples` passed to `QuadrupleForm` was always an empty array `[]` (hardcoded as `const noServerQuadruples: Quadruple[] = []`). A stale comment claimed "highlights come from the form's own internal span selection state" — but the form has no such mechanism.
+
+**Fix**: Map `pendingAnnotations` (the in-memory list of annotations for the current row) to `Quadruple[]` format so `TextHighlighter` can render per-annotation colored highlights.
 
 ```ts
-app.route("/projects", projectRoutes)
-app.route("/projects/:projectId/rows", rowRoutes)
-app.route("/projects/:projectId/categories", categoryRoutes)
-app.route("/projects", exportRoutes)
+// apps/web/src/pages/annotate.tsx
+const noServerQuadruples: Quadruple[] = pendingAnnotations.map((a) => ({
+  id: a.localId,
+  row_id: "",
+  project_id: projectId ?? "",
+  aspect_term: a.aspectTerm,
+  aspect_implicit: a.aspectImplicit,
+  aspect_start: a.aspectStart,
+  aspect_end: a.aspectEnd,
+  category_id: a.categoryId,
+  opinion_term: a.opinionTerm,
+  opinion_implicit: a.opinionImplicit,
+  opinion_start: a.opinionStart,
+  opinion_end: a.opinionEnd,
+  sentiment: a.sentiment,
+  created_at: "",
+  updated_at: "",
+}));
 ```
 
-Hono could not resolve `/:projectId/upload/init` inside `projectRoutes` because sibling top-level routes also used `/:projectId` as a prefix. The overlapping dynamic segments caused a routing conflict — Hono matched the wrong handler before reaching the upload route.
-
-**Solution:**
-
-Consolidated route mounting in `apps/worker/src/index.ts` so that all sub-routes under `/projects/:projectId` are registered without conflicting top-level prefixes.
-
-**Commit:** `fix(worker): resolve upload route 404 by consolidating /projects routes`
-
-**Files changed:**
-- `apps/worker/src/index.ts`
-- `apps/worker/src/routes/projects.ts`
-
-**Lesson:** When using `app.route()` in Hono, avoid registering multiple top-level routes that share the same dynamic segment prefix. Consolidate them under a single mount point or use sub-routers to prevent Hono from misrouting requests.
+**Files changed**: `apps/web/src/pages/annotate.tsx`
 
 ---
 
-## Issue 2: Cloudflare Workers Auto-Deploy Only Triggers from `main`, Not `development`
+## 4. Annotation Color Looks the Same for Active Selection and First Annotation
 
-**Symptom:** Fixes merged to the `development` branch never deployed to the live worker. The production worker kept running old code despite successful merges.
+**Problem**: When adding a new annotation while annotation #1 already exists, the active aspect selection and annotation #1 both appear blue. User may perceive this as "all blue".
 
-**Root cause:**
+**Root cause**: Not a bug. `ANNOTATION_COLORS[0]` is blue (`bg-blue-200`), and `active-aspect` style is also blue (`bg-blue-200 ring-1 ring-blue-400`). They are intentionally similar because annotation #1 and its active selection are the same item.
 
-The Cloudflare Workers GitHub integration was configured with production branch set to `main`. All PRs in this project merge to `development`, so every merge bypassed the deploy trigger entirely.
+**Expected behavior**:
+- Annotation #1 highlight = blue (index 0)
+- Annotation #2 highlight = emerald (index 1)
+- Active aspect selection = blue + ring (distinguishable by the ring outline)
+- Active opinion selection = emerald + ring
 
-**Solution (choose one):**
-
-Option A — Change the production branch in the Cloudflare dashboard:
-1. Go to Cloudflare Workers dashboard → select the worker
-2. Settings → Build → Production branch
-3. Change from `main` to `development`
-4. Save
-
-Option B — Merge `development` into `main` when ready to release to production.
-
-**Prevention:**
-
-Document clearly in `AGENT.md` and architecture docs that the Cloudflare Workers production branch setting must match the integration branch used in this repo (`development`). Any agent or contributor setting up a new worker must verify this setting before expecting deploys to work.
+No fix needed. Annotations with span data created after the highlight fix will display correctly with distinct per-index colors.
 
 ---
 
-## Issue 3: D1 "Too Many SQL Variables" on CSV Upload
+## 5. OAuth Callback Redirects to Worker Root Instead of Pages
 
-**Symptom:** Uploading a CSV with more than ~500 rows caused the Worker to throw a D1 error: `too many SQL variables`. The upload appeared to succeed on the frontend but data was missing or the Worker crashed silently.
+**Problem**: After GitHub OAuth login, the worker did `c.redirect("/")` which redirected to `acostator-api.apicode.my.id/` (JSON 404), not the Pages frontend.
 
-**Root cause:**
+**Fix**: Added `FRONTEND_URL` env var and changed redirect to `c.redirect(c.env.FRONTEND_URL)`.
 
-The original architecture inserted every CSV row as a `DatasetRow` record in D1 at upload time. D1 (SQLite) has a hard limit of 999 bound parameters per statement. With multi-column inserts batched naively, large CSVs exceeded this limit and caused the query to fail.
-
-Attempts to work around this with smaller batch sizes (e.g., 500 rows per transaction) only delayed the problem — batching reduced the frequency of the error but did not eliminate it for very large files, and it made uploads slow and resource-intensive.
-
-**Solution:**
-
-Redesigned the architecture to eliminate D1 row storage entirely:
-
-- CSV files are stored permanently in R2 after upload (already the case)
-- No `DatasetRow` records are inserted into D1 at any point
-- At annotation time, the browser fetches the CSV from R2 and parses it client-side with Papa Parse
-- D1 only stores `Annotation` records (quadruples), written one at a time as the user annotates
-
-This removes the upload bottleneck completely and makes the system scale to arbitrarily large CSVs.
-
-**Why this solution:**
-
-The root cause was architectural — trying to mirror row data into a database that was not designed for bulk inserts of arbitrary CSV content. The fix removes the mirror entirely. R2 is the right storage layer for the raw file; D1 is the right layer for structured annotation data only.
-
-**Status:**
-Verified: 2026-08-11
+**Files changed**: `apps/worker/src/routes/auth.ts`
 
 ---
+
+## 6. Session Cookie Not Sent Cross-Subdomain
+
+**Problem**: Cookie was set without `Domain` attribute, so the browser only sent it to `acostator-api.apicode.my.id`. The Pages frontend on `acostator.apicode.my.id` could not read the session.
+
+**Fix**: Added `Domain=.apicode.my.id` to cookie via `domain` parameter in `setSessionCookie`. Domain is read from `c.env.ALLOWED_DOMAIN`.
+
+**Files changed**: `apps/worker/src/lib/auth.ts`
+
+---
+
+## 7. Cloudflare Workers Auto-Deploy Points to `main` Instead of `development`
+
+**Problem**: Cloudflare Workers Builds was configured to deploy from `main`, but all active development happens on `development`. Merges to `development` did not trigger deploys.
+
+**Fix**: Changed the production branch in Cloudflare Workers Builds dashboard from `main` to `development`.
+
+---
+
+## 8. CI Test Step Fails: "No Test Files Found"
+
+**Problem**: Vitest exits with code 1 when no test files exist. CI failed at the test step even when there were no test files yet.
+
+**Fix**: Added `--passWithNoTests` flag to the test script in `apps/worker/package.json`.
+
+**Files changed**: `apps/worker/package.json`
+
+---
+
+## 9. Biome Lint Errors in Agent Branches
+
+**Problem**: Agents writing code with formatting or patterns that violate Biome rules. CI fails after PR is created.
+
+**Fix**: Run `npx biome check --write --unsafe .` in the worktree before pushing. All errors are auto-fixable. Non-auto-fixable errors (`noArrayIndexKey`, missing required interface fields) must be fixed manually.
