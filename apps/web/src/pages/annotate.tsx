@@ -213,6 +213,7 @@ export function AnnotatePage() {
 
   // Reset pending list, edit state, and form visibility when navigating to a new row.
   // Form starts open iff there are no local annotations cached for the destination row.
+  // Falls back to server fetch for completed rows where IDB is empty.
   useEffect(() => {
     if (!projectId) return;
     let cancelled = false;
@@ -220,16 +221,66 @@ export function AnnotatePage() {
     void (async () => {
       const cached = await getLocalAnnotations(projectId, currentIndex);
       if (cancelled) return;
-      const loaded = cached.map(fromIdbRecord);
-      setPendingAnnotations(loaded);
-      setEditingAnnotation(null);
-      setIsFormOpen(loaded.length === 0);
+
+      // IDB has data — use directly
+      if (cached.length > 0) {
+        setPendingAnnotations(cached.map(fromIdbRecord));
+        setEditingAnnotation(null);
+        setIsFormOpen(false);
+        return;
+      }
+
+      // IDB empty + row already completed → fallback fetch from server
+      const rowStatus = statuses.get(currentIndex);
+      if (rowStatus === "completed") {
+        try {
+          const res = await api.getAnnotationsByRow(projectId, currentIndex);
+          if (!cancelled && res.data.length > 0) {
+            const idbRecords: LocalAnnotationRecord[] = res.data.map((a: Annotation) => {
+              const rec: LocalAnnotationRecord = {
+                local_id: a.aspect,
+                row_index: a.row_index,
+                aspect: a.aspect,
+                category_id: "",
+                category: a.category,
+                opinion: a.opinion,
+                sentiment: a.sentiment as "positive" | "negative" | "neutral" | "mixed",
+                aspect_implicit: false,
+                aspect_start: null,
+                aspect_end: null,
+                opinion_implicit: false,
+                opinion_start: null,
+                opinion_end: null,
+                server_id: a.id,
+              };
+              return rec;
+            });
+            await saveLocalAnnotations(projectId, currentIndex, idbRecords);
+            if (!cancelled) {
+              setPendingAnnotations(idbRecords.map(fromIdbRecord));
+              setEditingAnnotation(null);
+              setIsFormOpen(false);
+              setIsDirty(false);
+            }
+            return;
+          }
+        } catch {
+          // silent — fall through to empty state
+        }
+      }
+
+      // No data at all → open form empty
+      if (!cancelled) {
+        setPendingAnnotations([]);
+        setEditingAnnotation(null);
+        setIsFormOpen(true);
+      }
     })();
 
     return () => {
       cancelled = true;
     };
-  }, [currentIndex, projectId]);
+  }, [currentIndex, projectId, statuses]);
 
   function handleAnnotationAdded(annotation: LocalAnnotation) {
     setPendingAnnotations((prev) => {
@@ -354,52 +405,8 @@ export function AnnotatePage() {
 
   async function handlePrevious() {
     if (!projectId || currentIndex === 0 || saving) return;
-
-    // 1. Move to previous row
-    const targetIndex = currentIndex - 1;
-    setCurrentIndex(targetIndex);
-
-    // 2. Load IDB for target row (the useEffect on currentIndex handles this already,
-    //    but we also try server if IDB is empty)
-    const cached = await getLocalAnnotations(projectId, targetIndex);
-    if (cached.length > 0) {
-      // IDB has data — already loaded by the useEffect, isDirty stays as-is
-      return;
-    }
-
-    // 3. IDB empty — try to load from server
-    try {
-      const res = await api.getAnnotationsByRow(projectId, targetIndex);
-      if (res.data.length > 0) {
-        const idbRecords: LocalAnnotationRecord[] = res.data.map((a: Annotation) => {
-          const rec: LocalAnnotationRecord = {
-            local_id: a.aspect, // use aspect as natural local key
-            row_index: a.row_index,
-            aspect: a.aspect,
-            category_id: "", // server doesn't return category_id in this shape
-            category: a.category,
-            opinion: a.opinion,
-            sentiment: a.sentiment as "positive" | "negative" | "neutral" | "mixed",
-            aspect_implicit: false,
-            aspect_start: null,
-            aspect_end: null,
-            opinion_implicit: false,
-            opinion_start: null,
-            opinion_end: null,
-            server_id: a.id,
-          };
-          return rec;
-        });
-        await saveLocalAnnotations(projectId, targetIndex, idbRecords);
-        // useEffect already fired for the new currentIndex — reload state
-        const loaded = idbRecords.map(fromIdbRecord);
-        setPendingAnnotations(loaded);
-        setIsFormOpen(loaded.length === 0);
-        setIsDirty(false); // data is fresh from server
-      }
-    } catch {
-      // silent — we just won't have server data
-    }
+    // Move to previous row — useEffect handles IDB load + server fallback for completed rows
+    setCurrentIndex(currentIndex - 1);
   }
 
   // -------------------------------------------------------------------------
@@ -481,6 +488,14 @@ export function AnnotatePage() {
       // Mark row completed locally
       await setRowStatus(projectId, currentIndex, "completed");
       setStatuses((prev) => new Map(prev).set(currentIndex, "completed"));
+
+      // Persist completed annotations ke IDB supaya bisa di-load saat balik via Previous
+      await saveLocalAnnotations(
+        projectId,
+        currentIndex,
+        pendingAnnotations.map((a) => toIdbRecord(a, currentIndex))
+      );
+
       setIsDirty(false);
 
       // Advance to next row
