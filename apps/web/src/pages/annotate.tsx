@@ -4,17 +4,26 @@ import { api } from "@/lib/api.ts";
 import type { Annotation } from "@/lib/api.ts";
 import {
   type CsvRow,
+  type LocalAnnotationRecord,
   type RowLocalStatus,
   getAllRowStatuses,
   getCSVRows,
+  getLocalAnnotations,
   hasCachedCSV,
   loadProgress,
   saveCSVRows,
+  saveLocalAnnotations,
   saveProgress,
   setRowStatus,
 } from "@/lib/indexeddb.ts";
+import type { Quadruple } from "@acostator/shared";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
+
+// ---------------------------------------------------------------------------
+// Feature flag — flip to true once the backend annotation-crud task is merged
+// ---------------------------------------------------------------------------
+const BACKEND_HAS_STATUS = false;
 
 const SENTIMENT_LABELS: Record<string, string> = {
   positive: "Positive",
@@ -86,6 +95,46 @@ interface ProjectResponse {
   };
 }
 
+type SyncStatus = "idle" | "syncing" | "synced" | "error";
+
+/** Convert a LocalAnnotation (form shape) to a LocalAnnotationRecord (IDB shape). */
+function toIdbRecord(a: LocalAnnotation, rowIndex: number): LocalAnnotationRecord {
+  const rec: LocalAnnotationRecord = {
+    local_id: a.localId,
+    row_index: rowIndex,
+    aspect: a.aspectTerm,
+    category_id: a.categoryId,
+    category: a.categoryName,
+    opinion: a.opinionTerm,
+    sentiment: a.sentiment as "positive" | "negative" | "neutral" | "mixed",
+    aspect_implicit: a.aspectImplicit,
+    aspect_start: a.aspectStart,
+    aspect_end: a.aspectEnd,
+    opinion_implicit: a.opinionImplicit,
+    opinion_start: a.opinionStart,
+    opinion_end: a.opinionEnd,
+  };
+  return rec;
+}
+
+/** Convert a LocalAnnotationRecord (IDB shape) back to LocalAnnotation (form shape). */
+function fromIdbRecord(r: LocalAnnotationRecord): LocalAnnotation {
+  return {
+    localId: r.local_id,
+    aspectTerm: r.aspect,
+    aspectImplicit: r.aspect_implicit,
+    aspectStart: r.aspect_start,
+    aspectEnd: r.aspect_end,
+    categoryId: r.category_id,
+    categoryName: r.category,
+    opinionTerm: r.opinion,
+    opinionImplicit: r.opinion_implicit,
+    opinionStart: r.opinion_start,
+    opinionEnd: r.opinion_end,
+    sentiment: r.sentiment,
+  };
+}
+
 export function AnnotatePage() {
   const { projectId } = useParams<{ projectId: string }>();
   const navigate = useNavigate();
@@ -96,11 +145,16 @@ export function AnnotatePage() {
   const [csvRows, setCsvRows] = useState<CsvRow[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [statuses, setStatuses] = useState<Map<number, RowLocalStatus>>(new Map());
-  const [annotations, setAnnotations] = useState<Annotation[]>([]);
   const [saving, setSaving] = useState(false);
+
+  // Sync indicator state
+  const [syncStatus, setSyncStatus] = useState<SyncStatus>("idle");
+  // isDirty: true when local annotations differ from last server state
+  const [isDirty, setIsDirty] = useState(false);
 
   const csvRowsRef = useRef<CsvRow[]>([]);
   csvRowsRef.current = csvRows;
+  const syncTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const loadData = useCallback(async () => {
     if (!projectId) return;
@@ -130,9 +184,6 @@ export function AnnotatePage() {
 
       const statusMap = await getAllRowStatuses(projectId);
       setStatuses(statusMap);
-
-      const annRes = await api.getAnnotations(projectId);
-      setAnnotations(annRes.data);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Failed to load data");
     } finally {
@@ -151,58 +202,84 @@ export function AnnotatePage() {
   }, [projectId, currentIndex, csvRows.length]);
 
   // -------------------------------------------------------------------------
-  // Navigation
-  // -------------------------------------------------------------------------
-
-  function goTo(index: number) {
-    const rows = csvRowsRef.current;
-    if (index < 0 || index >= rows.length) return;
-    setCurrentIndex(index);
-  }
-
-  function goNext() {
-    goTo(currentIndex + 1);
-  }
-
-  function goPrevious() {
-    goTo(currentIndex - 1);
-  }
-
-  // -------------------------------------------------------------------------
   // Local annotation state — reset on row change
   // -------------------------------------------------------------------------
 
   const [pendingAnnotations, setPendingAnnotations] = useState<LocalAnnotation[]>([]);
   const [editingAnnotation, setEditingAnnotation] = useState<LocalAnnotation | null>(null);
 
-  // Form open by default when there are no annotations yet for this row;
-  // collapsed after the first annotation is added.
+  // isFormOpen: true when no annotations yet for this row, false otherwise
   const [isFormOpen, setIsFormOpen] = useState(true);
 
-  // Reset pending list, edit state, and form visibility when navigating to a new row
-  // biome-ignore lint/correctness/useExhaustiveDependencies: reset on row change only
+  // Reset pending list, edit state, and form visibility when navigating to a new row.
+  // Form starts open iff there are no local annotations cached for the destination row.
   useEffect(() => {
-    setPendingAnnotations([]);
-    setEditingAnnotation(null);
-    setIsFormOpen(true);
-  }, [currentIndex]);
+    if (!projectId) return;
+    let cancelled = false;
+
+    void (async () => {
+      const cached = await getLocalAnnotations(projectId, currentIndex);
+      if (cancelled) return;
+      const loaded = cached.map(fromIdbRecord);
+      setPendingAnnotations(loaded);
+      setEditingAnnotation(null);
+      setIsFormOpen(loaded.length === 0);
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [currentIndex, projectId]);
 
   function handleAnnotationAdded(annotation: LocalAnnotation) {
-    setPendingAnnotations((prev) => [...prev, annotation]);
+    setPendingAnnotations((prev) => {
+      const next = [...prev, annotation];
+      // Persist to IDB and mark dirty
+      if (projectId) {
+        void saveLocalAnnotations(
+          projectId,
+          currentIndex,
+          next.map((a) => toIdbRecord(a, currentIndex))
+        );
+      }
+      return next;
+    });
+    setIsDirty(true);
+    setIsFormOpen(false);
   }
 
   function handleAnnotationUpdated(annotation: LocalAnnotation) {
-    setPendingAnnotations((prev) =>
-      prev.map((a) => (a.localId === annotation.localId ? annotation : a))
-    );
+    setPendingAnnotations((prev) => {
+      const next = prev.map((a) => (a.localId === annotation.localId ? annotation : a));
+      if (projectId) {
+        void saveLocalAnnotations(
+          projectId,
+          currentIndex,
+          next.map((a) => toIdbRecord(a, currentIndex))
+        );
+      }
+      return next;
+    });
     setEditingAnnotation(null);
+    setIsDirty(true);
   }
 
   function handleDeleteAnnotation(localId: string) {
-    setPendingAnnotations((prev) => prev.filter((a) => a.localId !== localId));
+    setPendingAnnotations((prev) => {
+      const next = prev.filter((a) => a.localId !== localId);
+      if (projectId) {
+        void saveLocalAnnotations(
+          projectId,
+          currentIndex,
+          next.map((a) => toIdbRecord(a, currentIndex))
+        );
+      }
+      return next;
+    });
     if (editingAnnotation?.localId === localId) {
       setEditingAnnotation(null);
     }
+    setIsDirty(true);
   }
 
   function handleEditAnnotation(annotation: LocalAnnotation) {
@@ -214,29 +291,203 @@ export function AnnotatePage() {
   }
 
   // -------------------------------------------------------------------------
-  // Actions
+  // handleNext — save local, move row, fire-and-forget draft sync
+  // -------------------------------------------------------------------------
+
+  async function handleNext() {
+    if (!projectId) return;
+    const rows = csvRowsRef.current;
+    if (currentIndex >= rows.length - 1) return;
+
+    // 1. Annotations already persisted to IDB on every add/edit/delete.
+    //    Nothing extra needed here.
+
+    // 2. Move to next row immediately
+    setCurrentIndex(currentIndex + 1);
+
+    // 3. Fire-and-forget background sync (draft) — only if there's something to sync
+    if (pendingAnnotations.length === 0) return;
+
+    setSyncStatus("syncing");
+
+    void (async () => {
+      try {
+        if (BACKEND_HAS_STATUS) {
+          await Promise.all(
+            pendingAnnotations.map((a) =>
+              api.postAnnotation(projectId, {
+                row_index: currentIndex,
+                aspect: a.aspectTerm,
+                category: a.categoryName,
+                opinion: a.opinionTerm,
+                sentiment: a.sentiment,
+                status: "draft",
+              })
+            )
+          );
+        } else {
+          await Promise.all(
+            pendingAnnotations.map((a) =>
+              api.postAnnotation(projectId, {
+                row_index: currentIndex,
+                aspect: a.aspectTerm,
+                category: a.categoryName,
+                opinion: a.opinionTerm,
+                sentiment: a.sentiment,
+              })
+            )
+          );
+        }
+
+        setSyncStatus("synced");
+        if (syncTimerRef.current) clearTimeout(syncTimerRef.current);
+        syncTimerRef.current = setTimeout(() => setSyncStatus("idle"), 2000);
+      } catch {
+        setSyncStatus("error");
+      }
+    })();
+  }
+
+  // -------------------------------------------------------------------------
+  // handlePrevious — save local, move row, load IDB then optionally server
+  // -------------------------------------------------------------------------
+
+  async function handlePrevious() {
+    if (!projectId || currentIndex === 0 || saving) return;
+
+    // 1. Move to previous row
+    const targetIndex = currentIndex - 1;
+    setCurrentIndex(targetIndex);
+
+    // 2. Load IDB for target row (the useEffect on currentIndex handles this already,
+    //    but we also try server if IDB is empty)
+    const cached = await getLocalAnnotations(projectId, targetIndex);
+    if (cached.length > 0) {
+      // IDB has data — already loaded by the useEffect, isDirty stays as-is
+      return;
+    }
+
+    // 3. IDB empty — try to load from server
+    try {
+      const res = await api.getAnnotationsByRow(projectId, targetIndex);
+      if (res.data.length > 0) {
+        const idbRecords: LocalAnnotationRecord[] = res.data.map((a: Annotation) => {
+          const rec: LocalAnnotationRecord = {
+            local_id: a.aspect, // use aspect as natural local key
+            row_index: a.row_index,
+            aspect: a.aspect,
+            category_id: "", // server doesn't return category_id in this shape
+            category: a.category,
+            opinion: a.opinion,
+            sentiment: a.sentiment as "positive" | "negative" | "neutral" | "mixed",
+            aspect_implicit: false,
+            aspect_start: null,
+            aspect_end: null,
+            opinion_implicit: false,
+            opinion_start: null,
+            opinion_end: null,
+            server_id: a.id,
+          };
+          return rec;
+        });
+        await saveLocalAnnotations(projectId, targetIndex, idbRecords);
+        // useEffect already fired for the new currentIndex — reload state
+        const loaded = idbRecords.map(fromIdbRecord);
+        setPendingAnnotations(loaded);
+        setIsFormOpen(loaded.length === 0);
+        setIsDirty(false); // data is fresh from server
+      }
+    } catch {
+      // silent — we just won't have server data
+    }
+  }
+
+  // -------------------------------------------------------------------------
+  // handleComplete — reconcile local vs server, mark completed, advance
   // -------------------------------------------------------------------------
 
   async function handleComplete() {
-    if (!projectId || csvRows.length === 0) return;
-    const row = csvRows[currentIndex];
-    if (!row) return;
-
+    if (!projectId) return;
     setSaving(true);
+
     try {
-      // POST all pending annotations to server in one batch
-      for (const a of pendingAnnotations) {
-        await api.postAnnotation(projectId, {
-          row_index: row.row_index,
-          aspect: a.aspectTerm,
-          category: a.categoryId,
-          opinion: a.opinionTerm,
-          sentiment: a.sentiment,
-        });
+      if (BACKEND_HAS_STATUS) {
+        // Full reconcile mode
+        const serverRes = await api.getAnnotationsByRow(projectId, currentIndex);
+        const serverAnnotations = serverRes.data;
+
+        // Build lookup maps by aspect (natural key)
+        const serverByAspect = new Map(serverAnnotations.map((a) => [a.aspect, a]));
+        const localByAspect = new Map(pendingAnnotations.map((a) => [a.aspectTerm, a]));
+
+        const ops: Promise<unknown>[] = [];
+
+        // Local items not on server → POST as completed
+        for (const [aspect, local] of localByAspect) {
+          const serverMatch = serverByAspect.get(aspect);
+          if (!serverMatch) {
+            ops.push(
+              api.postAnnotation(projectId, {
+                row_index: currentIndex,
+                aspect: local.aspectTerm,
+                category: local.categoryName,
+                opinion: local.opinionTerm,
+                sentiment: local.sentiment,
+                status: "completed",
+              })
+            );
+          } else {
+            // Both exist — check if data differs → PUT as completed
+            const differs =
+              local.categoryName !== serverMatch.category ||
+              local.opinionTerm !== serverMatch.opinion ||
+              local.sentiment !== serverMatch.sentiment;
+            if (differs || serverMatch.status !== "completed") {
+              ops.push(
+                api.putAnnotation(projectId, serverMatch.id, {
+                  category: local.categoryName,
+                  opinion: local.opinionTerm,
+                  sentiment: local.sentiment,
+                  status: "completed",
+                })
+              );
+            }
+          }
+        }
+
+        // Server items not in local → DELETE
+        for (const [aspect, serverAnn] of serverByAspect) {
+          if (!localByAspect.has(aspect)) {
+            ops.push(api.deleteAnnotation(projectId, serverAnn.id));
+          }
+        }
+
+        await Promise.all(ops);
+      } else {
+        // Simplified mode — just POST all local annotations
+        await Promise.all(
+          pendingAnnotations.map((a) =>
+            api.postAnnotation(projectId, {
+              row_index: currentIndex,
+              aspect: a.aspectTerm,
+              category: a.categoryName,
+              opinion: a.opinionTerm,
+              sentiment: a.sentiment,
+            })
+          )
+        );
       }
-      await setRowStatus(projectId, row.row_index, "completed");
-      setStatuses((prev) => new Map(prev).set(row.row_index, "completed"));
-      goNext();
+
+      // Mark row completed locally
+      await setRowStatus(projectId, currentIndex, "completed");
+      setStatuses((prev) => new Map(prev).set(currentIndex, "completed"));
+      setIsDirty(false);
+
+      // Advance to next row
+      const rows = csvRowsRef.current;
+      if (currentIndex < rows.length - 1) {
+        setCurrentIndex(currentIndex + 1);
+      }
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Failed to save annotations");
     } finally {
@@ -244,20 +495,17 @@ export function AnnotatePage() {
     }
   }
 
-  async function handleSkip() {
-    if (!projectId || csvRows.length === 0) return;
-    const row = csvRows[currentIndex];
-    if (!row) return;
+  // -------------------------------------------------------------------------
+  // handleSkip
+  // -------------------------------------------------------------------------
 
-    setSaving(true);
-    try {
-      await setRowStatus(projectId, row.row_index, "skipped");
-      setStatuses((prev) => new Map(prev).set(row.row_index, "skipped"));
-      goNext();
-    } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "Failed to skip row");
-    } finally {
-      setSaving(false);
+  async function handleSkip() {
+    if (!projectId) return;
+    await setRowStatus(projectId, currentIndex, "skipped");
+    setStatuses((prev) => new Map(prev).set(currentIndex, "skipped"));
+    const rows = csvRowsRef.current;
+    if (currentIndex < rows.length - 1) {
+      setCurrentIndex(currentIndex + 1);
     }
   }
 
@@ -265,33 +513,23 @@ export function AnnotatePage() {
   // Derived values
   // -------------------------------------------------------------------------
 
-  const currentRow = csvRows[currentIndex] ?? null;
-  const currentStatus = currentRow ? (statuses.get(currentRow.row_index) ?? "pending") : "pending";
-  const savedAnnotations = currentRow
-    ? annotations.filter((a) => a.row_index === currentRow.row_index)
-    : [];
-
-  const completedCount = [...statuses.values()].filter((s) => s === "completed").length;
   const totalRows = csvRows.length;
-  const allDone = totalRows > 0 && completedCount === totalRows;
+  const completedCount = [...statuses.values()].filter((s) => s === "completed").length;
+  const currentRow = csvRows[currentIndex];
+  const currentStatus = statuses.get(currentIndex) ?? "pending";
 
-  // Convert pending annotations to Quadruple shape for TextHighlighter
-  const pendingAsQuadruples = pendingAnnotations.map((a) => ({
-    id: a.localId,
-    aspect_term: a.aspectTerm,
-    aspect_implicit: a.aspectImplicit,
-    aspect_start: a.aspectStart,
-    aspect_end: a.aspectEnd,
-    category_id: a.categoryId,
-    opinion_term: a.opinionTerm,
-    opinion_implicit: a.opinionImplicit,
-    opinion_start: a.opinionStart,
-    opinion_end: a.opinionEnd,
-    sentiment: a.sentiment,
-  }));
+  // Complete button visibility:
+  // Hide when row is already completed AND not dirty.
+  // Show in all other cases.
+  const showComplete = !(currentStatus === "completed" && !isDirty);
+
+  // QuadrupleForm.existingQuadruples expects Quadruple[] (server shape) for TextHighlighter.
+  // Pending annotations are managed locally — pass empty array; highlights come from
+  // the form's own internal span selection state.
+  const noServerQuadruples: Quadruple[] = [];
 
   // -------------------------------------------------------------------------
-  // Render
+  // Render states
   // -------------------------------------------------------------------------
 
   if (loading) {
@@ -317,7 +555,7 @@ export function AnnotatePage() {
     );
   }
 
-  if (allDone || !currentRow) {
+  if (!currentRow) {
     return (
       <div className="flex min-h-screen flex-col items-center justify-center gap-4">
         <p className="text-sm text-gray-500">All rows have been annotated.</p>
@@ -372,52 +610,16 @@ export function AnnotatePage() {
       {/* Row text */}
       <div className="rounded-xl border border-gray-200 bg-white px-5 py-4">
         <p className="text-xs font-medium text-gray-400 uppercase tracking-wide mb-1">
-          Row {currentRow.row_index + 1}
+          Row {currentIndex + 1}
         </p>
         <p className="text-sm text-gray-800 leading-relaxed">{currentRow.text}</p>
       </div>
 
-      {/* Annotations already saved to D1 for this row */}
-      {savedAnnotations.length > 0 && (
-        <div className="space-y-2">
-          <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">
-            Saved annotations ({savedAnnotations.length})
-          </p>
-          <ul className="space-y-2">
-            {savedAnnotations.map((a) => (
-              <li
-                key={a.id}
-                className="rounded-lg border border-gray-200 bg-white px-4 py-3 text-sm"
-              >
-                <div className="space-y-0.5 text-gray-700">
-                  <p>
-                    <span className="text-gray-400">Aspect:</span> {a.aspect}
-                  </p>
-                  <p>
-                    <span className="text-gray-400">Category:</span> {a.category}
-                  </p>
-                  <p>
-                    <span className="text-gray-400">Opinion:</span> {a.opinion}
-                  </p>
-                  <span
-                    className={`inline-block rounded-full px-2 py-0.5 text-xs font-medium ${
-                      SENTIMENT_COLORS[a.sentiment] ?? "bg-gray-100 text-gray-700"
-                    }`}
-                  >
-                    {SENTIMENT_LABELS[a.sentiment] ?? a.sentiment}
-                  </span>
-                </div>
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
-
-      {/* Pending (unsaved) annotations — with per-entry color dot, edit, delete */}
+      {/* Pending annotations — with per-entry color dot, edit, delete */}
       {pendingAnnotations.length > 0 && (
         <div className="space-y-2">
           <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">
-            Pending annotations ({pendingAnnotations.length})
+            Annotations ({pendingAnnotations.length})
           </p>
           <ul className="space-y-2">
             {pendingAnnotations.map((a, idx) => {
@@ -485,7 +687,7 @@ export function AnnotatePage() {
         key={currentIndex}
         projectId={projectId ?? ""}
         rowText={currentRow.text}
-        existingQuadruples={pendingAsQuadruples as never}
+        existingQuadruples={noServerQuadruples}
         isFormOpen={isFormOpen}
         onOpenForm={() => setIsFormOpen(true)}
         onCloseForm={() => setIsFormOpen(false)}
@@ -495,15 +697,59 @@ export function AnnotatePage() {
         onCancelEdit={handleCancelEdit}
       />
 
+      {/* Sync indicator — shown above action buttons */}
+      {syncStatus !== "idle" && (
+        <div className="flex items-center gap-1.5" aria-live="polite">
+          {syncStatus === "syncing" && (
+            <>
+              <span className="inline-block h-2 w-2 rounded-full bg-gray-400 animate-pulse" />
+              <span className="text-xs text-gray-400">syncing...</span>
+            </>
+          )}
+          {syncStatus === "synced" && (
+            <>
+              <svg
+                className="h-3.5 w-3.5 text-green-500"
+                viewBox="0 0 20 20"
+                fill="currentColor"
+                aria-hidden="true"
+              >
+                <path
+                  fillRule="evenodd"
+                  d="M16.704 4.153a.75.75 0 01.143 1.052l-8 10.5a.75.75 0 01-1.127.075l-4.5-4.5a.75.75 0 011.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 011.05-.143z"
+                  clipRule="evenodd"
+                />
+              </svg>
+              <span className="text-xs text-green-600">saved</span>
+            </>
+          )}
+          {syncStatus === "error" && (
+            <span
+              className="inline-block h-2 w-2 rounded-full bg-red-400"
+              aria-label="sync error"
+            />
+          )}
+        </div>
+      )}
+
       {/* Actions */}
       <div className="flex items-center gap-3">
         <button
           type="button"
-          onClick={goPrevious}
+          onClick={() => void handlePrevious()}
           disabled={currentIndex === 0 || saving}
           className="rounded-lg border border-gray-200 px-4 py-2.5 text-sm hover:bg-gray-50 disabled:opacity-40"
         >
           ← Previous
+        </button>
+
+        <button
+          type="button"
+          onClick={() => void handleNext()}
+          disabled={saving || currentIndex >= csvRows.length - 1}
+          className="rounded-lg border border-gray-200 px-4 py-2.5 text-sm hover:bg-gray-50 disabled:opacity-50"
+        >
+          Next →
         </button>
 
         <button
@@ -515,14 +761,16 @@ export function AnnotatePage() {
           Skip →
         </button>
 
-        <button
-          type="button"
-          onClick={() => void handleComplete()}
-          disabled={pendingAnnotations.length === 0 || saving}
-          className="flex-1 rounded-lg bg-gray-900 px-4 py-2.5 text-sm font-medium text-white hover:bg-gray-700 disabled:opacity-50"
-        >
-          {saving ? "Saving…" : "Complete →"}
-        </button>
+        {showComplete && (
+          <button
+            type="button"
+            onClick={() => void handleComplete()}
+            disabled={saving}
+            className="flex-1 rounded-lg bg-gray-900 px-4 py-2.5 text-sm font-medium text-white hover:bg-gray-700 disabled:opacity-50"
+          >
+            {saving ? "Saving…" : "✓ Complete"}
+          </button>
+        )}
       </div>
     </div>
   );

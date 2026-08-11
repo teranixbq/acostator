@@ -81,6 +81,7 @@ const STATEMENTS = [
     \`category\` text NOT NULL,
     \`opinion\` text NOT NULL,
     \`sentiment\` text NOT NULL,
+    \`status\` text NOT NULL DEFAULT 'completed',
     \`created_at\` text DEFAULT (datetime('now')) NOT NULL,
     \`updated_at\` text DEFAULT (datetime('now')) NOT NULL,
     FOREIGN KEY (\`project_id\`) REFERENCES \`projects\`(\`id\`) ON UPDATE no action ON DELETE no action

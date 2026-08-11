@@ -129,6 +129,9 @@ export const annotations = sqliteTable(
     sentiment: text("sentiment", {
       enum: ["positive", "negative", "neutral", "mixed"],
     }).notNull(),
+    status: text("status", { enum: ["draft", "completed"] })
+      .notNull()
+      .default("completed"),
     created_at: text("created_at").notNull().default(sql`(datetime('now'))`),
     updated_at: text("updated_at").notNull().default(sql`(datetime('now'))`),
   },

@@ -87,6 +87,24 @@ export const AnnotationCreateSchema = z.object({
   category: z.string().min(1),
   opinion: z.string().min(1),
   sentiment: z.enum(["positive", "negative", "neutral", "mixed"]),
+  status: z.enum(["draft", "completed"]).optional(),
+});
+
+export const AnnotationUpdateSchema = z.object({
+  aspect: z.string().min(1).optional(),
+  category: z.string().min(1).optional(),
+  opinion: z.string().min(1).optional(),
+  sentiment: z.enum(["positive", "negative", "neutral", "mixed"]).optional(),
+  status: z.enum(["draft", "completed"]).optional(),
+});
+
+export const AnnotationParamsSchema = z.object({
+  projectId: z.string().min(1),
+  annotationId: z.string().min(1),
+});
+
+export const AnnotationQuerySchema = z.object({
+  row_index: z.coerce.number().int().nonnegative().optional(),
 });
 
 // --- Pagination ---
@@ -105,3 +123,18 @@ export type PaginationInput = z.infer<typeof PaginationSchema>;
 export type UploadInitInput = z.infer<typeof UploadInitSchema>;
 export type UploadCompleteInput = z.infer<typeof UploadCompleteSchema>;
 export type AnnotationCreateInput = z.infer<typeof AnnotationCreateSchema>;
+export type AnnotationUpdateInput = z.infer<typeof AnnotationUpdateSchema>;
+
+// AnnotationEntry — shape returned by the server (includes id, timestamps, status)
+export interface AnnotationEntry {
+  id: string;
+  project_id: string;
+  row_index: number;
+  aspect: string;
+  category: string;
+  opinion: string;
+  sentiment: "positive" | "negative" | "neutral" | "mixed";
+  status: "draft" | "completed";
+  created_at: string;
+  updated_at: string;
+}
