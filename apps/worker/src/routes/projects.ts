@@ -7,7 +7,7 @@ import {
   UploadInitSchema,
 } from "@acostator/shared";
 import { zValidator } from "@hono/zod-validator";
-import { and, count, eq, isNull, sql } from "drizzle-orm";
+import { and, eq, isNull, sql } from "drizzle-orm";
 import { Hono } from "hono";
 import { datasetRows, projects } from "../db/schema.ts";
 import type { Env } from "../lib/db.ts";
@@ -103,7 +103,7 @@ projectRoutes.get("/:projectId", zValidator("param", ProjectParamsSchema), async
   if (!project) return c.json({ error: "Not found" }, 404);
 
   const countResult = await db
-    .select({ annotated: count() })
+    .select({ annotated: sql<number>`COUNT(*)` })
     .from(datasetRows)
     .where(and(eq(datasetRows.project_id, projectId), eq(datasetRows.status, "completed")));
 
@@ -183,7 +183,7 @@ projectRoutes.post(
   zValidator("json", UploadInitSchema),
   async (c) => {
     const { projectId } = c.req.valid("param");
-    const { file_name, file_size } = c.req.valid("json");
+    const { file_name, file_size, text_column } = c.req.valid("json");
     const session = c.get("session");
     const db = createDb(c.env);
 
@@ -205,7 +205,7 @@ projectRoutes.post(
     const url = new URL(c.req.url);
     const baseUrl = `${url.protocol}//${url.host}`;
 
-    const result = await initUpload(c.env, projectId, file_name, file_size, baseUrl);
+    const result = await initUpload(c.env, projectId, file_name, file_size, text_column, baseUrl);
     return c.json({ data: result }, 201);
   }
 );
