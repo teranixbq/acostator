@@ -496,20 +496,6 @@ export function AnnotatePage() {
   }
 
   // -------------------------------------------------------------------------
-  // handleSkip
-  // -------------------------------------------------------------------------
-
-  async function handleSkip() {
-    if (!projectId) return;
-    await setRowStatus(projectId, currentIndex, "skipped");
-    setStatuses((prev) => new Map(prev).set(currentIndex, "skipped"));
-    const rows = csvRowsRef.current;
-    if (currentIndex < rows.length - 1) {
-      setCurrentIndex(currentIndex + 1);
-    }
-  }
-
-  // -------------------------------------------------------------------------
   // Derived values
   // -------------------------------------------------------------------------
 
@@ -738,7 +724,7 @@ export function AnnotatePage() {
           type="button"
           onClick={() => void handlePrevious()}
           disabled={currentIndex === 0 || saving}
-          className="rounded-lg border border-gray-200 px-4 py-2.5 text-sm hover:bg-gray-50 disabled:opacity-40"
+          className="flex-1 rounded-lg border border-gray-200 px-4 py-2.5 text-sm hover:bg-gray-50 disabled:opacity-40"
         >
           ← Previous
         </button>
@@ -747,18 +733,9 @@ export function AnnotatePage() {
           type="button"
           onClick={() => void handleNext()}
           disabled={saving || currentIndex >= csvRows.length - 1}
-          className="rounded-lg border border-gray-200 px-4 py-2.5 text-sm hover:bg-gray-50 disabled:opacity-50"
+          className="flex-1 rounded-lg border border-gray-200 px-4 py-2.5 text-sm hover:bg-gray-50 disabled:opacity-50"
         >
           Next →
-        </button>
-
-        <button
-          type="button"
-          onClick={() => void handleSkip()}
-          disabled={saving}
-          className="rounded-lg border border-gray-200 px-4 py-2.5 text-sm hover:bg-gray-50 disabled:opacity-50"
-        >
-          Skip →
         </button>
 
         {showComplete && (
