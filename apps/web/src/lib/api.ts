@@ -38,7 +38,9 @@ export interface Annotation {
   category: string;
   opinion: string;
   sentiment: string;
+  status: "draft" | "completed";
   created_at: string;
+  updated_at: string;
 }
 
 export interface AnnotationsResponse {
@@ -51,6 +53,15 @@ export interface PostAnnotationBody {
   category: string;
   opinion: string;
   sentiment: string;
+  status?: "draft" | "completed";
+}
+
+export interface PutAnnotationBody {
+  aspect?: string;
+  category?: string;
+  opinion?: string;
+  sentiment?: string;
+  status?: "draft" | "completed";
 }
 
 export const api = {
@@ -59,14 +70,22 @@ export const api = {
     request<T>(path, { method: "POST", body: JSON.stringify(body) }),
   patch: <T>(path: string, body: unknown) =>
     request<T>(path, { method: "PATCH", body: JSON.stringify(body) }),
+  put: <T>(path: string, body: unknown) =>
+    request<T>(path, { method: "PUT", body: JSON.stringify(body) }),
   delete: <T>(path: string) => request<T>(path, { method: "DELETE" }),
 
   /** GET /projects/:id/csv — returns raw CSV text */
   getCSV: (projectId: string) => fetchCSV(projectId),
 
-  /** GET /projects/:id/annotations */
+  /** GET /projects/:id/annotations — all annotations for a project */
   getAnnotations: (projectId: string) =>
     request<AnnotationsResponse>(`/projects/${projectId}/annotations`),
+
+  /** GET /projects/:id/annotations?row_index=N — annotations for a specific row */
+  getAnnotationsByRow: (projectId: string, rowIndex: number) =>
+    request<AnnotationsResponse>(
+      `/projects/${projectId}/annotations?row_index=${rowIndex}`
+    ),
 
   /** POST /projects/:id/annotations */
   postAnnotation: (projectId: string, body: PostAnnotationBody) =>
@@ -74,4 +93,18 @@ export const api = {
       method: "POST",
       body: JSON.stringify(body),
     }),
+
+  /** PUT /projects/:id/annotations/:annotationId */
+  putAnnotation: (projectId: string, annotationId: string, body: PutAnnotationBody) =>
+    request<{ data: Annotation }>(
+      `/projects/${projectId}/annotations/${annotationId}`,
+      { method: "PUT", body: JSON.stringify(body) }
+    ),
+
+  /** DELETE /projects/:id/annotations/:annotationId */
+  deleteAnnotation: (projectId: string, annotationId: string) =>
+    request<{ success: true }>(
+      `/projects/${projectId}/annotations/${annotationId}`,
+      { method: "DELETE" }
+    ),
 };

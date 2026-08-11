@@ -3,9 +3,11 @@
  *
  * DB name:    acostator-{projectId}
  * Stores:
- *   csv_rows  — { row_index: number, text: string }         (keyPath: "row_index")
- *   progress  — { key: "progress", last_row_index: number } (keyPath: "key")
- *   statuses  — { row_index: number, status: RowLocalStatus }(keyPath: "row_index")
+ *   csv_rows    — { row_index: number, text: string }                  (keyPath: "row_index")
+ *   progress    — { key: "progress", last_row_index: number }          (keyPath: "key")
+ *   statuses    — { row_index: number, status: RowLocalStatus }        (keyPath: "row_index")
+ *   annotations — LocalAnnotationRecord[]                              (keyPath: "local_id")
+ *                 index: "by_row" on row_index
  */
 
 export type RowLocalStatus = "pending" | "completed" | "skipped";
@@ -25,7 +27,27 @@ export interface RowStatusRecord {
   status: RowLocalStatus;
 }
 
-const DB_VERSION = 1;
+/** Local annotation record — mirrors server shape but keyed by local_id (aspect used as natural key). */
+export interface LocalAnnotationRecord {
+  /** local_id = aspect (unique per row) — used as IndexedDB keyPath */
+  local_id: string;
+  row_index: number;
+  aspect: string;
+  category_id: string;
+  category: string;
+  opinion: string;
+  sentiment: "positive" | "negative" | "neutral" | "mixed";
+  aspect_implicit: boolean;
+  aspect_start: number | null;
+  aspect_end: number | null;
+  opinion_implicit: boolean;
+  opinion_start: number | null;
+  opinion_end: number | null;
+  /** server-assigned id once synced; undefined while only local */
+  server_id?: string;
+}
+
+const DB_VERSION = 2;
 
 function dbName(projectId: string): string {
   return `acostator-${projectId}`;
@@ -45,6 +67,11 @@ function openDB(projectId: string): Promise<IDBDatabase> {
       }
       if (!db.objectStoreNames.contains("statuses")) {
         db.createObjectStore("statuses", { keyPath: "row_index" });
+      }
+      // v2: local annotation cache keyed by aspect (natural unique key per row)
+      if (!db.objectStoreNames.contains("annotations")) {
+        const store = db.createObjectStore("annotations", { keyPath: "local_id" });
+        store.createIndex("by_row", "row_index", { unique: false });
       }
     };
 
@@ -180,4 +207,80 @@ export async function getAllRowStatuses(projectId: string): Promise<Map<number, 
     map.set(r.row_index, r.status);
   }
   return map;
+}
+
+// ---------------------------------------------------------------------------
+// Annotation cache helpers
+// ---------------------------------------------------------------------------
+
+/** Get all locally-cached annotations for a specific row. */
+export async function getLocalAnnotations(
+  projectId: string,
+  rowIndex: number
+): Promise<LocalAnnotationRecord[]> {
+  const db = await openDB(projectId);
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction("annotations", "readonly");
+    const index = tx.objectStore("annotations").index("by_row");
+    const req = index.getAll(rowIndex);
+    req.onsuccess = () => {
+      db.close();
+      resolve(req.result as LocalAnnotationRecord[]);
+    };
+    req.onerror = () => {
+      db.close();
+      reject(req.error);
+    };
+  });
+}
+
+/** Overwrite all locally-cached annotations for a row (replaces existing). */
+export async function saveLocalAnnotations(
+  projectId: string,
+  rowIndex: number,
+  records: LocalAnnotationRecord[]
+): Promise<void> {
+  const db = await openDB(projectId);
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction("annotations", "readwrite");
+    const store = tx.objectStore("annotations");
+    // Delete all existing records for this row first
+    const index = store.index("by_row");
+    const cursorReq = index.openCursor(rowIndex);
+    cursorReq.onsuccess = () => {
+      const cursor = cursorReq.result;
+      if (cursor) {
+        cursor.delete();
+        cursor.continue();
+      } else {
+        // All deleted — now put the new records
+        for (const rec of records) {
+          store.put(rec);
+        }
+      }
+    };
+    tx.oncomplete = () => {
+      db.close();
+      resolve();
+    };
+    tx.onerror = () => {
+      db.close();
+      reject(tx.error);
+    };
+  });
+}
+
+/** Delete a single local annotation by its local_id (aspect). */
+export async function deleteLocalAnnotation(
+  projectId: string,
+  localId: string
+): Promise<void> {
+  const db = await openDB(projectId);
+  await new Promise<void>((resolve, reject) => {
+    const tx = db.transaction("annotations", "readwrite");
+    const req = tx.objectStore("annotations").delete(localId);
+    req.onsuccess = () => resolve();
+    req.onerror = () => reject(req.error);
+  });
+  db.close();
 }

@@ -15,6 +15,13 @@
       "when": 1786287758000,
       "tag": "0001_add_text_column_and_annotations",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1786287759000,
+      "tag": "0002_annotation_status",
+      "breakpoints": true
     }
   ]
 }
