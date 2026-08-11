@@ -74,6 +74,7 @@ projectRoutes.post("/", zValidator("json", CreateProjectSchema), async (c) => {
     file_name: "",
     file_size: 0,
     total_rows: 0,
+    text_column: "",
     annotation_order: input.annotation_order,
     created_at: now,
     updated_at: now,
