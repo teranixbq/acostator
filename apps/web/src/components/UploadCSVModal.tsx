@@ -228,7 +228,7 @@ export function UploadCSVModal({ projectId, onClose, onUploaded }: Props) {
   return (
     <dialog
       ref={dialogRef}
-      className="w-full max-w-md rounded-2xl border border-gray-200 bg-white p-6 shadow-xl backdrop:bg-black/30"
+      className="m-auto w-full max-w-md rounded-2xl border border-gray-200 bg-white p-6 shadow-xl backdrop:bg-black/30"
     >
       <h2 className="mb-4 text-base font-semibold text-gray-900">Upload CSV</h2>
 
