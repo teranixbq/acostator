@@ -71,6 +71,21 @@ const STATEMENTS = [
     FOREIGN KEY (\`project_id\`) REFERENCES \`projects\`(\`id\`) ON UPDATE no action ON DELETE no action,
     FOREIGN KEY (\`category_id\`) REFERENCES \`categories\`(\`id\`) ON UPDATE no action ON DELETE no action
   )`,
+  // 0001_add_text_column_and_annotations.sql
+  "ALTER TABLE `projects` ADD `text_column` text NOT NULL DEFAULT ''",
+  `CREATE TABLE IF NOT EXISTS \`annotations\` (
+    \`id\` text PRIMARY KEY NOT NULL,
+    \`project_id\` text NOT NULL,
+    \`row_index\` integer NOT NULL,
+    \`aspect\` text NOT NULL,
+    \`category\` text NOT NULL,
+    \`opinion\` text NOT NULL,
+    \`sentiment\` text NOT NULL,
+    \`created_at\` text DEFAULT (datetime('now')) NOT NULL,
+    \`updated_at\` text DEFAULT (datetime('now')) NOT NULL,
+    FOREIGN KEY (\`project_id\`) REFERENCES \`projects\`(\`id\`) ON UPDATE no action ON DELETE no action
+  )`,
+  "CREATE UNIQUE INDEX IF NOT EXISTS `annotations_project_row_aspect_idx` ON `annotations` (`project_id`,`row_index`,`aspect`)",
 ];
 
 beforeAll(async () => {

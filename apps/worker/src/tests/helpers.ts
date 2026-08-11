@@ -71,6 +71,7 @@ export interface SeedProjectOptions {
   file_name?: string;
   file_size?: number;
   total_rows?: number;
+  text_column?: string;
   status?: "active" | "archived";
   annotation_order?: "sequential" | "random";
   annotation_queue?: string | null;
@@ -90,6 +91,7 @@ export async function seedProject(env: TestEnv, opts: SeedProjectOptions) {
     file_name: opts.file_name ?? "test.csv",
     file_size: opts.file_size ?? 1024,
     total_rows: opts.total_rows ?? 0,
+    text_column: opts.text_column ?? "",
     status: opts.status ?? "active",
     annotation_order: opts.annotation_order ?? "sequential",
     annotation_queue: opts.annotation_queue ?? null,
