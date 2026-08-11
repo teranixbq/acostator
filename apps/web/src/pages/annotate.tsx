@@ -524,10 +524,25 @@ export function AnnotatePage() {
   // Show in all other cases.
   const showComplete = !(currentStatus === "completed" && !isDirty);
 
-  // QuadrupleForm.existingQuadruples expects Quadruple[] (server shape) for TextHighlighter.
-  // Pending annotations are managed locally — pass empty array; highlights come from
-  // the form's own internal span selection state.
-  const noServerQuadruples: Quadruple[] = [];
+  // Build Quadruple[] from pendingAnnotations so TextHighlighter can render
+  // existing span highlights for the current row.
+  const noServerQuadruples: Quadruple[] = pendingAnnotations.map((a) => ({
+    id: a.localId,
+    row_id: "",
+    project_id: projectId ?? "",
+    aspect_term: a.aspectTerm,
+    aspect_implicit: a.aspectImplicit,
+    aspect_start: a.aspectStart,
+    aspect_end: a.aspectEnd,
+    category_id: a.categoryId,
+    opinion_term: a.opinionTerm,
+    opinion_implicit: a.opinionImplicit,
+    opinion_start: a.opinionStart,
+    opinion_end: a.opinionEnd,
+    sentiment: a.sentiment,
+    created_at: "",
+    updated_at: "",
+  }));
 
   // -------------------------------------------------------------------------
   // Render states
