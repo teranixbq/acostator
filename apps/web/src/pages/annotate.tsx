@@ -2,7 +2,6 @@ import { type LocalAnnotation, QuadrupleForm } from "@/components/QuadrupleForm.
 import { getAnnotationColor } from "@/components/TextHighlighter.tsx";
 import { api } from "@/lib/api.ts";
 import type { Annotation } from "@/lib/api.ts";
-import type { Quadruple } from "@acostator/shared";
 import {
   type CsvRow,
   type LocalAnnotationRecord,
@@ -17,6 +16,7 @@ import {
   saveProgress,
   setRowStatus,
 } from "@/lib/indexeddb.ts";
+import type { Quadruple } from "@acostator/shared";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 
@@ -213,7 +213,6 @@ export function AnnotatePage() {
 
   // Reset pending list, edit state, and form visibility when navigating to a new row.
   // Form starts open iff there are no local annotations cached for the destination row.
-  // biome-ignore lint/correctness/useExhaustiveDependencies: reset on row change only
   useEffect(() => {
     if (!projectId) return;
     let cancelled = false;
@@ -377,7 +376,7 @@ export function AnnotatePage() {
             local_id: a.aspect, // use aspect as natural local key
             row_index: a.row_index,
             aspect: a.aspect,
-            category_id: "",   // server doesn't return category_id in this shape
+            category_id: "", // server doesn't return category_id in this shape
             category: a.category,
             opinion: a.opinion,
             sentiment: a.sentiment as "positive" | "negative" | "neutral" | "mixed",
@@ -725,7 +724,10 @@ export function AnnotatePage() {
             </>
           )}
           {syncStatus === "error" && (
-            <span className="inline-block h-2 w-2 rounded-full bg-red-400" aria-label="sync error" />
+            <span
+              className="inline-block h-2 w-2 rounded-full bg-red-400"
+              aria-label="sync error"
+            />
           )}
         </div>
       )}
@@ -748,6 +750,15 @@ export function AnnotatePage() {
           className="rounded-lg border border-gray-200 px-4 py-2.5 text-sm hover:bg-gray-50 disabled:opacity-50"
         >
           Next →
+        </button>
+
+        <button
+          type="button"
+          onClick={() => void handleSkip()}
+          disabled={saving}
+          className="rounded-lg border border-gray-200 px-4 py-2.5 text-sm hover:bg-gray-50 disabled:opacity-50"
+        >
+          Skip →
         </button>
 
         {showComplete && (

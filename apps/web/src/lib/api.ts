@@ -83,9 +83,7 @@ export const api = {
 
   /** GET /projects/:id/annotations?row_index=N — annotations for a specific row */
   getAnnotationsByRow: (projectId: string, rowIndex: number) =>
-    request<AnnotationsResponse>(
-      `/projects/${projectId}/annotations?row_index=${rowIndex}`
-    ),
+    request<AnnotationsResponse>(`/projects/${projectId}/annotations?row_index=${rowIndex}`),
 
   /** POST /projects/:id/annotations */
   postAnnotation: (projectId: string, body: PostAnnotationBody) =>
@@ -96,15 +94,14 @@ export const api = {
 
   /** PUT /projects/:id/annotations/:annotationId */
   putAnnotation: (projectId: string, annotationId: string, body: PutAnnotationBody) =>
-    request<{ data: Annotation }>(
-      `/projects/${projectId}/annotations/${annotationId}`,
-      { method: "PUT", body: JSON.stringify(body) }
-    ),
+    request<{ data: Annotation }>(`/projects/${projectId}/annotations/${annotationId}`, {
+      method: "PUT",
+      body: JSON.stringify(body),
+    }),
 
   /** DELETE /projects/:id/annotations/:annotationId */
   deleteAnnotation: (projectId: string, annotationId: string) =>
-    request<{ success: true }>(
-      `/projects/${projectId}/annotations/${annotationId}`,
-      { method: "DELETE" }
-    ),
+    request<{ success: true }>(`/projects/${projectId}/annotations/${annotationId}`, {
+      method: "DELETE",
+    }),
 };

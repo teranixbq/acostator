@@ -271,10 +271,7 @@ export async function saveLocalAnnotations(
 }
 
 /** Delete a single local annotation by its local_id (aspect). */
-export async function deleteLocalAnnotation(
-  projectId: string,
-  localId: string
-): Promise<void> {
+export async function deleteLocalAnnotation(projectId: string, localId: string): Promise<void> {
   const db = await openDB(projectId);
   await new Promise<void>((resolve, reject) => {
     const tx = db.transaction("annotations", "readwrite");
