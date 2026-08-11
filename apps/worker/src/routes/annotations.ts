@@ -6,7 +6,7 @@ import {
   ProjectParamsSchema,
 } from "@acostator/shared";
 import { zValidator } from "@hono/zod-validator";
-import { and, eq, isNull } from "drizzle-orm";
+import { and, eq, isNull, sql } from "drizzle-orm";
 import { Hono } from "hono";
 import { annotations, projects } from "../db/schema.ts";
 import type { Env } from "../lib/db.ts";
@@ -124,20 +124,41 @@ annotationRoutes.post(
     const id = crypto.randomUUID();
     const now = new Date().toISOString();
 
-    await db.insert(annotations).values({
-      id,
-      project_id: projectId,
-      row_index: input.row_index,
-      aspect: input.aspect,
-      category: input.category,
-      opinion: input.opinion,
-      sentiment: input.sentiment,
-      status: input.status ?? "completed",
-      created_at: now,
-      updated_at: now,
-    });
+    await db
+      .insert(annotations)
+      .values({
+        id,
+        project_id: projectId,
+        row_index: input.row_index,
+        aspect: input.aspect,
+        category: input.category,
+        opinion: input.opinion,
+        sentiment: input.sentiment,
+        status: input.status ?? "completed",
+        created_at: now,
+        updated_at: now,
+      })
+      .onConflictDoUpdate({
+        target: [annotations.project_id, annotations.row_index, annotations.aspect],
+        set: {
+          category: input.category,
+          opinion: input.opinion,
+          sentiment: input.sentiment,
+          status: sql`excluded.status`,
+          updated_at: now,
+        },
+      });
 
-    const [created] = await db.select().from(annotations).where(eq(annotations.id, id));
+    const [created] = await db
+      .select()
+      .from(annotations)
+      .where(
+        and(
+          eq(annotations.project_id, projectId),
+          eq(annotations.row_index, input.row_index),
+          eq(annotations.aspect, input.aspect)
+        )
+      );
 
     return c.json({ data: created }, 201);
   }
