@@ -168,8 +168,9 @@ function csvEscape(value: string): string {
 }
 
 /**
- * Splits a CSV string into lines, correctly handling quoted fields
- * that may contain embedded newlines.
+ * Splits a CSV string into raw lines, correctly handling quoted fields
+ * that may contain embedded newlines. Each line is returned verbatim
+ * (quotes intact) for parseCSVRow to decode.
  */
 function splitCsvLines(csv: string): string[] {
   const lines: string[] = [];
@@ -180,7 +181,8 @@ function splitCsvLines(csv: string): string[] {
     const ch = csv[i];
     if (ch === '"') {
       if (inQuotes && csv[i + 1] === '"') {
-        current += '"';
+        // Escaped quote — keep both chars verbatim, parseCSVRow will decode
+        current += '""';
         i++;
       } else {
         inQuotes = !inQuotes;
