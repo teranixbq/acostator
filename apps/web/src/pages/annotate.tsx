@@ -99,7 +99,7 @@ type SyncStatus = "idle" | "syncing" | "synced" | "error";
 
 /** Convert a LocalAnnotation (form shape) to a LocalAnnotationRecord (IDB shape). */
 function toIdbRecord(a: LocalAnnotation, rowIndex: number): LocalAnnotationRecord {
-  return {
+  const rec: LocalAnnotationRecord = {
     local_id: a.localId,
     row_index: rowIndex,
     aspect: a.aspectTerm,
@@ -113,8 +113,8 @@ function toIdbRecord(a: LocalAnnotation, rowIndex: number): LocalAnnotationRecor
     opinion_implicit: a.opinionImplicit,
     opinion_start: a.opinionStart,
     opinion_end: a.opinionEnd,
-    server_id: undefined,
   };
+  return rec;
 }
 
 /** Convert a LocalAnnotationRecord (IDB shape) back to LocalAnnotation (form shape). */
@@ -372,15 +372,25 @@ export function AnnotatePage() {
     try {
       const res = await api.getAnnotationsByRow(projectId, targetIndex);
       if (res.data.length > 0) {
-        const idbRecords: LocalAnnotationRecord[] = res.data.map((a: Annotation) => ({
-          local_id: a.aspect, // use aspect as natural local key
-          row_index: a.row_index,
-          aspect: a.aspect,
-          category: a.category,
-          opinion: a.opinion,
-          sentiment: a.sentiment as "positive" | "negative" | "neutral" | "mixed",
-          server_id: a.id,
-        }));
+        const idbRecords: LocalAnnotationRecord[] = res.data.map((a: Annotation) => {
+          const rec: LocalAnnotationRecord = {
+            local_id: a.aspect, // use aspect as natural local key
+            row_index: a.row_index,
+            aspect: a.aspect,
+            category_id: "",   // server doesn't return category_id in this shape
+            category: a.category,
+            opinion: a.opinion,
+            sentiment: a.sentiment as "positive" | "negative" | "neutral" | "mixed",
+            aspect_implicit: false,
+            aspect_start: null,
+            aspect_end: null,
+            opinion_implicit: false,
+            opinion_start: null,
+            opinion_end: null,
+            server_id: a.id,
+          };
+          return rec;
+        });
         await saveLocalAnnotations(projectId, targetIndex, idbRecords);
         // useEffect already fired for the new currentIndex — reload state
         const loaded = idbRecords.map(fromIdbRecord);
