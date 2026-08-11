@@ -1,4 +1,5 @@
-import { QuadrupleForm } from "@/components/QuadrupleForm.tsx";
+import { type LocalAnnotation, QuadrupleForm } from "@/components/QuadrupleForm.tsx";
+import { getAnnotationColor } from "@/components/TextHighlighter.tsx";
 import { api } from "@/lib/api.ts";
 import type { Annotation } from "@/lib/api.ts";
 import {
@@ -12,7 +13,6 @@ import {
   saveProgress,
   setRowStatus,
 } from "@/lib/indexeddb.ts";
-import type { Quadruple } from "@acostator/shared";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 
@@ -35,7 +35,6 @@ function parseCSV(csvText: string, textColumn: string): CsvRow[] {
   const lines = csvText.split(/\r?\n/).filter((l) => l.trim().length > 0);
   if (lines.length < 2) return [];
 
-  // Parse header row
   const headers = splitCSVLine(lines[0] ?? "");
   const colIndex = headers.findIndex(
     (h) => h.trim().toLowerCase() === textColumn.trim().toLowerCase()
@@ -61,7 +60,6 @@ function splitCSVLine(line: string): string[] {
   for (let i = 0; i < line.length; i++) {
     const ch = line[i];
     if (ch === '"') {
-      // Escaped quote inside quoted field
       if (inQuotes && line[i + 1] === '"') {
         field += '"';
         i++;
@@ -88,9 +86,6 @@ interface ProjectResponse {
   };
 }
 
-// Quadruples are stored in memory only (fetched from D1 on load)
-type LocalQuadruple = Quadruple;
-
 export function AnnotatePage() {
   const { projectId } = useParams<{ projectId: string }>();
   const navigate = useNavigate();
@@ -98,18 +93,12 @@ export function AnnotatePage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // CSV rows loaded from IndexedDB (or fetched from R2)
   const [csvRows, setCsvRows] = useState<CsvRow[]>([]);
-  // Current row index into csvRows array
   const [currentIndex, setCurrentIndex] = useState(0);
-  // Row statuses from IndexedDB
   const [statuses, setStatuses] = useState<Map<number, RowLocalStatus>>(new Map());
-  // Annotations fetched from D1
   const [annotations, setAnnotations] = useState<Annotation[]>([]);
-  // Whether a Complete/Skip action is in flight
   const [saving, setSaving] = useState(false);
 
-  // Keep a ref to the latest csvRows for use inside callbacks without stale closure
   const csvRowsRef = useRef<CsvRow[]>([]);
   csvRowsRef.current = csvRows;
 
@@ -119,11 +108,9 @@ export function AnnotatePage() {
     setError(null);
 
     try {
-      // Fetch project metadata for text_column
       const projectRes = await api.get<ProjectResponse>(`/projects/${projectId}`);
       const textColumn = projectRes.data.text_column;
 
-      // Load CSV rows — use IndexedDB cache if available
       let rows: CsvRow[];
       const cached = await hasCachedCSV(projectId);
       if (cached) {
@@ -137,16 +124,13 @@ export function AnnotatePage() {
       }
       setCsvRows(rows);
 
-      // Restore last position
       const lastIndex = await loadProgress(projectId);
       const startIndex = lastIndex !== null ? Math.min(lastIndex, rows.length - 1) : 0;
       setCurrentIndex(startIndex);
 
-      // Load row statuses
       const statusMap = await getAllRowStatuses(projectId);
       setStatuses(statusMap);
 
-      // Load existing annotations from D1
       const annRes = await api.getAnnotations(projectId);
       setAnnotations(annRes.data);
     } catch (err: unknown) {
@@ -167,7 +151,7 @@ export function AnnotatePage() {
   }, [projectId, currentIndex, csvRows.length]);
 
   // -------------------------------------------------------------------------
-  // Navigation helpers
+  // Navigation
   // -------------------------------------------------------------------------
 
   function goTo(index: number) {
@@ -180,37 +164,72 @@ export function AnnotatePage() {
     goTo(currentIndex + 1);
   }
 
-  function goPrev() {
-    goTo(currentIndex - 1);
+  // -------------------------------------------------------------------------
+  // Local annotation state — reset on row change
+  // -------------------------------------------------------------------------
+
+  const [pendingAnnotations, setPendingAnnotations] = useState<LocalAnnotation[]>([]);
+  const [editingAnnotation, setEditingAnnotation] = useState<LocalAnnotation | null>(null);
+
+  // Reset pending list and edit state when navigating to a new row
+  // biome-ignore lint/correctness/useExhaustiveDependencies: reset on row change only
+  useEffect(() => {
+    setPendingAnnotations([]);
+    setEditingAnnotation(null);
+  }, [currentIndex]);
+
+  function handleAnnotationAdded(annotation: LocalAnnotation) {
+    setPendingAnnotations((prev) => [...prev, annotation]);
+  }
+
+  function handleAnnotationUpdated(annotation: LocalAnnotation) {
+    setPendingAnnotations((prev) =>
+      prev.map((a) => (a.localId === annotation.localId ? annotation : a))
+    );
+    setEditingAnnotation(null);
+  }
+
+  function handleDeleteAnnotation(localId: string) {
+    setPendingAnnotations((prev) => prev.filter((a) => a.localId !== localId));
+    if (editingAnnotation?.localId === localId) {
+      setEditingAnnotation(null);
+    }
+  }
+
+  function handleEditAnnotation(annotation: LocalAnnotation) {
+    setEditingAnnotation(annotation);
+  }
+
+  function handleCancelEdit() {
+    setEditingAnnotation(null);
   }
 
   // -------------------------------------------------------------------------
   // Actions
   // -------------------------------------------------------------------------
 
-  async function handleComplete(quadruples: LocalQuadruple[]) {
+  async function handleComplete() {
     if (!projectId || csvRows.length === 0) return;
     const row = csvRows[currentIndex];
     if (!row) return;
 
     setSaving(true);
     try {
-      // Post each quadruple in the current session to D1
-      for (const q of quadruples) {
+      // POST all pending annotations to server in one batch
+      for (const a of pendingAnnotations) {
         await api.postAnnotation(projectId, {
           row_index: row.row_index,
-          aspect: q.aspect_term,
-          category: q.category_id,
-          opinion: q.opinion_term,
-          sentiment: q.sentiment,
+          aspect: a.aspectTerm,
+          category: a.categoryId,
+          opinion: a.opinionTerm,
+          sentiment: a.sentiment,
         });
       }
-      // Mark locally as completed
       await setRowStatus(projectId, row.row_index, "completed");
       setStatuses((prev) => new Map(prev).set(row.row_index, "completed"));
       goNext();
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "Failed to save annotation");
+      setError(err instanceof Error ? err.message : "Failed to save annotations");
     } finally {
       setSaving(false);
     }
@@ -234,36 +253,11 @@ export function AnnotatePage() {
   }
 
   // -------------------------------------------------------------------------
-  // Quadruple state — kept locally, posted on Complete
-  // -------------------------------------------------------------------------
-
-  const [pendingQuadruples, setPendingQuadruples] = useState<LocalQuadruple[]>([]);
-  const [deletingId, setDeletingId] = useState<string | null>(null);
-
-  // Reset pending quadruples when moving to a different row.
-  // currentIndex is intentionally omitted — biome treats setter functions as stable.
-  // biome-ignore lint/correctness/useExhaustiveDependencies: reset on row change only
-  useEffect(() => {
-    setPendingQuadruples([]);
-  }, [currentIndex]);
-
-  function handleQuadrupleAdded(quadruple: LocalQuadruple) {
-    setPendingQuadruples((prev) => [...prev, quadruple]);
-  }
-
-  function handleDeleteQuadruple(quadrupleId: string) {
-    setDeletingId(quadrupleId);
-    setPendingQuadruples((prev) => prev.filter((q) => q.id !== quadrupleId));
-    setDeletingId(null);
-  }
-
-  // -------------------------------------------------------------------------
   // Derived values
   // -------------------------------------------------------------------------
 
   const currentRow = csvRows[currentIndex] ?? null;
   const currentStatus = currentRow ? (statuses.get(currentRow.row_index) ?? "pending") : "pending";
-  // Annotations already saved to D1 for this row
   const savedAnnotations = currentRow
     ? annotations.filter((a) => a.row_index === currentRow.row_index)
     : [];
@@ -272,6 +266,21 @@ export function AnnotatePage() {
   const totalRows = csvRows.length;
   const allDone = totalRows > 0 && completedCount === totalRows;
 
+  // Convert pending annotations to Quadruple shape for TextHighlighter
+  const pendingAsQuadruples = pendingAnnotations.map((a) => ({
+    id: a.localId,
+    aspect_term: a.aspectTerm,
+    aspect_implicit: a.aspectImplicit,
+    aspect_start: a.aspectStart,
+    aspect_end: a.aspectEnd,
+    category_id: a.categoryId,
+    opinion_term: a.opinionTerm,
+    opinion_implicit: a.opinionImplicit,
+    opinion_start: a.opinionStart,
+    opinion_end: a.opinionEnd,
+    sentiment: a.sentiment,
+  }));
+
   // -------------------------------------------------------------------------
   // Render
   // -------------------------------------------------------------------------
@@ -279,14 +288,14 @@ export function AnnotatePage() {
   if (loading) {
     return (
       <div className="flex min-h-screen items-center justify-center">
-        <span className="text-sm text-gray-500">Loading...</span>
+        <p className="text-sm text-gray-500">Loading…</p>
       </div>
     );
   }
 
   if (error) {
     return (
-      <div className="flex min-h-screen flex-col items-center justify-center gap-3">
+      <div className="flex min-h-screen flex-col items-center justify-center gap-4">
         <p className="text-sm text-red-500">{error}</p>
         <button
           type="button"
@@ -327,27 +336,36 @@ export function AnnotatePage() {
         </button>
         <div className="flex items-center gap-3">
           <span className="text-xs text-gray-400">
-            {completedCount} / {totalRows} completed
+            {currentIndex + 1} / {totalRows}
           </span>
-          <span className="text-xs text-gray-400">Row #{currentRow.row_index + 1}</span>
-          {currentStatus !== "pending" && (
-            <span
-              className={`rounded-full px-2 py-0.5 text-xs font-medium ${
-                currentStatus === "completed"
-                  ? "bg-green-100 text-green-700"
+          <span
+            className={`rounded-full px-2 py-0.5 text-xs font-medium ${
+              currentStatus === "completed"
+                ? "bg-green-100 text-green-700"
+                : currentStatus === "skipped"
+                  ? "bg-yellow-100 text-yellow-700"
                   : "bg-gray-100 text-gray-500"
-              }`}
-            >
-              {currentStatus}
-            </span>
-          )}
+            }`}
+          >
+            {currentStatus}
+          </span>
         </div>
       </div>
 
+      {/* Progress bar */}
+      <div className="h-1.5 w-full rounded-full bg-gray-100">
+        <div
+          className="h-1.5 rounded-full bg-gray-900 transition-all"
+          style={{ width: `${Math.round((completedCount / totalRows) * 100)}%` }}
+        />
+      </div>
+
       {/* Row text */}
-      <div className="rounded-xl border border-gray-200 bg-white p-5">
-        <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">Row text</p>
-        <p className="text-sm leading-relaxed text-gray-900">{currentRow.text}</p>
+      <div className="rounded-xl border border-gray-200 bg-white px-5 py-4">
+        <p className="text-xs font-medium text-gray-400 uppercase tracking-wide mb-1">
+          Row {currentRow.row_index + 1}
+        </p>
+        <p className="text-sm text-gray-800 leading-relaxed">{currentRow.text}</p>
       </div>
 
       {/* Annotations already saved to D1 for this row */}
@@ -386,70 +404,87 @@ export function AnnotatePage() {
         </div>
       )}
 
-      {/* Pending (unsaved) quadruples added in this session */}
-      {pendingQuadruples.length > 0 && (
+      {/* Pending (unsaved) annotations — with per-entry color dot, edit, delete */}
+      {pendingAnnotations.length > 0 && (
         <div className="space-y-2">
           <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">
-            Pending quadruples ({pendingQuadruples.length})
+            Pending annotations ({pendingAnnotations.length})
           </p>
           <ul className="space-y-2">
-            {pendingQuadruples.map((q) => (
-              <li
-                key={q.id}
-                className="rounded-lg border border-blue-100 bg-blue-50 px-4 py-3 text-sm"
-              >
-                <div className="flex items-start justify-between gap-3">
-                  <div className="space-y-0.5 text-gray-700 min-w-0">
-                    <p>
-                      <span className="text-gray-400">Aspect:</span> {q.aspect_term}
-                    </p>
-                    <p>
-                      <span className="text-gray-400">Opinion:</span> {q.opinion_term}
-                    </p>
-                    <span
-                      className={`inline-block rounded-full px-2 py-0.5 text-xs font-medium ${
-                        SENTIMENT_COLORS[q.sentiment] ?? "bg-gray-100 text-gray-700"
-                      }`}
-                    >
-                      {SENTIMENT_LABELS[q.sentiment] ?? q.sentiment}
-                    </span>
+            {pendingAnnotations.map((a, idx) => {
+              const color = getAnnotationColor(idx);
+              const isBeingEdited = editingAnnotation?.localId === a.localId;
+              return (
+                <li
+                  key={a.localId}
+                  className={`rounded-lg border px-4 py-3 text-sm ${color.border} bg-white ${
+                    isBeingEdited ? "ring-2 ring-offset-1 ring-gray-400" : ""
+                  }`}
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex items-start gap-2 min-w-0">
+                      {/* Color dot matching TextHighlighter */}
+                      <span
+                        className={`mt-1 shrink-0 inline-block h-2.5 w-2.5 rounded-full ${color.dot}`}
+                        aria-hidden="true"
+                      />
+                      <div className="space-y-0.5 text-gray-700 min-w-0">
+                        <p>
+                          <span className="text-gray-400">Aspect:</span> {a.aspectTerm}
+                        </p>
+                        <p>
+                          <span className="text-gray-400">Category:</span> {a.categoryName}
+                        </p>
+                        <p>
+                          <span className="text-gray-400">Opinion:</span> {a.opinionTerm}
+                        </p>
+                        <span
+                          className={`inline-block rounded-full px-2 py-0.5 text-xs font-medium ${
+                            SENTIMENT_COLORS[a.sentiment] ?? "bg-gray-100 text-gray-700"
+                          }`}
+                        >
+                          {SENTIMENT_LABELS[a.sentiment] ?? a.sentiment}
+                        </span>
+                      </div>
+                    </div>
+                    <div className="flex shrink-0 gap-1">
+                      <button
+                        type="button"
+                        onClick={() => handleEditAnnotation(a)}
+                        className="rounded-md px-2 py-1 text-xs text-gray-500 hover:bg-gray-100"
+                      >
+                        Edit
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteAnnotation(a.localId)}
+                        className="rounded-md px-2 py-1 text-xs text-red-500 hover:bg-red-50"
+                      >
+                        Remove
+                      </button>
+                    </div>
                   </div>
-                  <button
-                    type="button"
-                    disabled={deletingId === q.id}
-                    onClick={() => handleDeleteQuadruple(q.id)}
-                    className="shrink-0 rounded-md px-2 py-1 text-xs text-red-500 hover:bg-red-50 disabled:opacity-50"
-                  >
-                    Remove
-                  </button>
-                </div>
-              </li>
-            ))}
+                </li>
+              );
+            })}
           </ul>
         </div>
       )}
 
-      {/* Quadruple form — key forces full remount on row change, resetting all internal state */}
+      {/* Annotation form — key forces full remount on row change */}
       <QuadrupleForm
         key={currentIndex}
         projectId={projectId ?? ""}
-        rowId={`local-${currentRow.row_index}`}
         rowText={currentRow.text}
-        existingQuadruples={pendingQuadruples}
-        onAdd={handleQuadrupleAdded}
+        existingQuadruples={pendingAsQuadruples as never}
+        editingQuadruple={editingAnnotation}
+        onAdd={handleAnnotationAdded}
+        onUpdate={handleAnnotationUpdated}
+        onCancelEdit={handleCancelEdit}
       />
 
-      {/* Navigation + actions */}
+      {/* Actions — Complete only, no Prev/Next */}
       <div className="flex items-center gap-3">
-        <button
-          type="button"
-          onClick={goPrev}
-          disabled={currentIndex === 0 || saving}
-          className="rounded-lg border border-gray-200 px-4 py-2.5 text-sm hover:bg-gray-50 disabled:opacity-40"
-        >
-          ← Prev
-        </button>
-
         <button
           type="button"
           onClick={() => void handleSkip()}
@@ -461,20 +496,11 @@ export function AnnotatePage() {
 
         <button
           type="button"
-          onClick={() => void handleComplete(pendingQuadruples)}
-          disabled={pendingQuadruples.length === 0 || saving}
+          onClick={() => void handleComplete()}
+          disabled={pendingAnnotations.length === 0 || saving}
           className="flex-1 rounded-lg bg-gray-900 px-4 py-2.5 text-sm font-medium text-white hover:bg-gray-700 disabled:opacity-50"
         >
-          {saving ? "Saving…" : "Complete & next"}
-        </button>
-
-        <button
-          type="button"
-          onClick={goNext}
-          disabled={currentIndex >= csvRows.length - 1 || saving}
-          className="rounded-lg border border-gray-200 px-4 py-2.5 text-sm hover:bg-gray-50 disabled:opacity-40"
-        >
-          Next →
+          {saving ? "Saving…" : "Complete →"}
         </button>
       </div>
     </div>
