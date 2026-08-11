@@ -74,7 +74,7 @@ export const CategoryParamsSchema = z.object({
 export const UploadInitSchema = z.object({
   file_name: z.string().min(1),
   file_size: z.number().positive(),
-  text_column: z.string().min(1),
+  text_column: z.string().default(""),
 });
 
 export const UploadCompleteSchema = z.object({ upload_id: z.string().uuid() });

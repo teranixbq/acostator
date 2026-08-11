@@ -299,7 +299,7 @@ describe("POST /projects/:projectId/upload/init", () => {
     const res = await app.fetch(
       req("POST", `/projects/${projectId}/upload/init`, {
         cookie,
-        body: { file_name: "data.csv", file_size: 2048 },
+        body: { file_name: "data.csv", file_size: 2048, text_column: "text" },
       }),
       env
     );
@@ -318,7 +318,7 @@ describe("POST /projects/:projectId/upload/init", () => {
     const res = await app.fetch(
       req("POST", `/projects/${projectId}/upload/init`, {
         cookie,
-        body: { file_name: "data.csv", file_size: 100 },
+        body: { file_name: "data.csv", file_size: 100, text_column: "text" },
       }),
       env
     );
@@ -333,7 +333,7 @@ describe("POST /projects/:projectId/upload/init", () => {
     const res = await app.fetch(
       req("POST", `/projects/${projectId}/upload/init`, {
         cookie,
-        body: { file_size: 100 },
+        body: { file_size: 100, text_column: "text" },
       }),
       env
     );
@@ -346,7 +346,7 @@ describe("POST /projects/:projectId/upload/init", () => {
 // ---------------------------------------------------------------------------
 
 describe("CSV upload flow (init → PUT → complete)", () => {
-  it("populates dataset_rows from a valid CSV", async () => {
+  it("stores CSV in R2 and updates project metadata from a valid CSV", async () => {
     const userId = await seedUser(env);
     const projectId = await seedProject(env, { user_id: userId });
     const cookie = await makeSessionCookie(userId);
@@ -355,7 +355,7 @@ describe("CSV upload flow (init → PUT → complete)", () => {
     const initRes = await app.fetch(
       req("POST", `/projects/${projectId}/upload/init`, {
         cookie,
-        body: { file_name: "data.csv", file_size: 100 },
+        body: { file_name: "data.csv", file_size: 100, text_column: "text" },
       }),
       env
     );
@@ -377,7 +377,7 @@ describe("CSV upload flow (init → PUT → complete)", () => {
     );
     expect(putRes.status).toBe(200);
 
-    // 3. complete
+    // 3. complete — project metadata should be updated (total_rows, file_name)
     const completeRes = await app.fetch(
       req("POST", `/projects/${projectId}/upload/complete`, {
         cookie,
@@ -392,12 +392,12 @@ describe("CSV upload flow (init → PUT → complete)", () => {
     expect(project.total_rows).toBe(3);
     expect(project.file_name).toBe("data.csv");
 
-    // 4. rows should be visible
-    const rowsRes = await app.fetch(req("GET", `/projects/${projectId}/rows`, { cookie }), env);
-    const rowsBody = (await rowsRes.json()) as { data: Array<{ text: string; status: string }> };
-    expect(rowsBody.data).toHaveLength(3);
-    expect(rowsBody.data[0]?.text).toBe("The battery is great");
-    expect(rowsBody.data[0]?.status).toBe("pending");
+    // 4. CSV should be retrievable from R2 via GET /csv
+    const csvRes = await app.fetch(req("GET", `/projects/${projectId}/csv`, { cookie }), env);
+    expect(csvRes.status).toBe(200);
+    const csvBody = await csvRes.text();
+    expect(csvBody).toContain("The battery is great");
+    expect(csvBody).toContain("The screen is bad");
   });
 
   it("returns 422 for a CSV with no data rows", async () => {
@@ -408,7 +408,7 @@ describe("CSV upload flow (init → PUT → complete)", () => {
     const initRes = await app.fetch(
       req("POST", `/projects/${projectId}/upload/init`, {
         cookie,
-        body: { file_name: "empty.csv", file_size: 10 },
+        body: { file_name: "empty.csv", file_size: 10, text_column: "text" },
       }),
       env
     );
@@ -436,7 +436,7 @@ describe("CSV upload flow (init → PUT → complete)", () => {
     expect(completeRes.status).toBe(422);
   });
 
-  it("falls back to first column when no 'text' column exists", async () => {
+  it("stores CSV with correct text_column in project record", async () => {
     const userId = await seedUser(env);
     const projectId = await seedProject(env, { user_id: userId });
     const cookie = await makeSessionCookie(userId);
@@ -444,7 +444,7 @@ describe("CSV upload flow (init → PUT → complete)", () => {
     const initRes = await app.fetch(
       req("POST", `/projects/${projectId}/upload/init`, {
         cookie,
-        body: { file_name: "nocolumn.csv", file_size: 50 },
+        body: { file_name: "nocolumn.csv", file_size: 50, text_column: "sentence" },
       }),
       env
     );
@@ -470,9 +470,10 @@ describe("CSV upload flow (init → PUT → complete)", () => {
       env
     );
     expect(completeRes.status).toBe(200);
-
-    const rowsRes = await app.fetch(req("GET", `/projects/${projectId}/rows`, { cookie }), env);
-    const rowsBody = (await rowsRes.json()) as { data: Array<{ text: string }> };
-    expect(rowsBody.data[0]?.text).toBe("Hello world");
+    const { data: updatedProject } = (await completeRes.json()) as {
+      data: { text_column: string; total_rows: number };
+    };
+    expect(updatedProject.text_column).toBe("sentence");
+    expect(updatedProject.total_rows).toBe(1);
   });
 });

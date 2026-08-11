@@ -9,7 +9,7 @@ import {
 import { zValidator } from "@hono/zod-validator";
 import { and, eq, isNull, sql } from "drizzle-orm";
 import { Hono } from "hono";
-import { annotations, projects } from "../db/schema.ts";
+import { datasetRows, projects } from "../db/schema.ts";
 import type { Env } from "../lib/db.ts";
 import { createDb } from "../lib/db.ts";
 import { type AuthVariables, requireAuth } from "../middleware/auth.ts";
@@ -44,8 +44,9 @@ projectRoutes.get("/", zValidator("query", PaginationSchema), async (c) => {
       created_at: projects.created_at,
       updated_at: projects.updated_at,
       annotated_rows: sql<number>`(
-        SELECT COUNT(*) FROM annotations
-        WHERE annotations.project_id = projects.id
+        SELECT COUNT(*) FROM dataset_rows
+        WHERE dataset_rows.project_id = projects.id
+        AND dataset_rows.status = 'completed'
       )`,
     })
     .from(projects)
@@ -103,8 +104,8 @@ projectRoutes.get("/:projectId", zValidator("param", ProjectParamsSchema), async
 
   const countResult = await db
     .select({ annotated: sql<number>`COUNT(*)` })
-    .from(annotations)
-    .where(eq(annotations.project_id, projectId));
+    .from(datasetRows)
+    .where(and(eq(datasetRows.project_id, projectId), eq(datasetRows.status, "completed")));
 
   const annotated = countResult[0]?.annotated ?? 0;
   return c.json({ data: { ...project, annotated_rows: annotated } });
