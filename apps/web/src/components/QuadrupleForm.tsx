@@ -1,6 +1,5 @@
-import { api } from "@/lib/api.ts";
 import type { Quadruple, Sentiment } from "@acostator/shared";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { CategoryPicker } from "./CategoryPicker.tsx";
 import { TextHighlighter, type TextSpan } from "./TextHighlighter.tsx";
 
@@ -9,16 +8,32 @@ interface CategoryOption {
   name: string;
 }
 
-interface CreateQuadrupleResponse {
-  data: Quadruple;
-}
-
 interface QuadrupleFormProps {
   projectId: string;
-  rowId: string;
   rowText: string;
   existingQuadruples: Quadruple[];
-  onAdd: (quadruple: Quadruple) => void;
+  /** If set, the form is in edit mode — fields are pre-populated. */
+  editingQuadruple?: LocalAnnotation | null;
+  onAdd: (annotation: LocalAnnotation) => void;
+  onUpdate: (annotation: LocalAnnotation) => void;
+  onCancelEdit: () => void;
+}
+
+/** A quadruple that lives entirely in local state (no server id yet). */
+export interface LocalAnnotation {
+  /** Stable client-side id so list keys are stable */
+  localId: string;
+  aspectTerm: string;
+  aspectImplicit: boolean;
+  aspectStart: number | null;
+  aspectEnd: number | null;
+  opinionTerm: string;
+  opinionImplicit: boolean;
+  opinionStart: number | null;
+  opinionEnd: number | null;
+  categoryId: string;
+  categoryName: string;
+  sentiment: Sentiment;
 }
 
 const SENTIMENTS: { value: Sentiment; label: string; color: string }[] = [
@@ -29,15 +44,17 @@ const SENTIMENTS: { value: Sentiment; label: string; color: string }[] = [
 ];
 
 /**
- * Form for adding ACOS quadruples to a row.
- * Integrates TextHighlighter (aspect + opinion), CategoryPicker, and sentiment radios.
+ * Form for adding / editing local ACOS annotations.
+ * Does NOT call the server — all data is returned via onAdd / onUpdate.
  */
 export function QuadrupleForm({
   projectId,
-  rowId,
   rowText,
   existingQuadruples,
+  editingQuadruple,
   onAdd,
+  onUpdate,
+  onCancelEdit,
 }: QuadrupleFormProps) {
   const [aspectSpan, setAspectSpan] = useState<TextSpan | null>(null);
   const [aspectImplicit, setAspectImplicit] = useState(false);
@@ -45,11 +62,49 @@ export function QuadrupleForm({
   const [opinionImplicit, setOpinionImplicit] = useState(false);
   const [category, setCategory] = useState<CategoryOption | null>(null);
   const [sentiment, setSentiment] = useState<Sentiment | null>(null);
-  const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   // Which field is the text highlighter currently targeting
   const [highlightTarget, setHighlightTarget] = useState<"aspect" | "opinion">("aspect");
+
+  const isEditing = editingQuadruple != null;
+
+  // When editingQuadruple changes, populate the form fields
+  useEffect(() => {
+    if (editingQuadruple) {
+      setAspectImplicit(editingQuadruple.aspectImplicit);
+      setAspectSpan(
+        editingQuadruple.aspectImplicit ||
+          editingQuadruple.aspectStart == null ||
+          editingQuadruple.aspectEnd == null
+          ? null
+          : {
+              text: editingQuadruple.aspectTerm,
+              start: editingQuadruple.aspectStart,
+              end: editingQuadruple.aspectEnd,
+            }
+      );
+      setOpinionImplicit(editingQuadruple.opinionImplicit);
+      setOpinionSpan(
+        editingQuadruple.opinionImplicit ||
+          editingQuadruple.opinionStart == null ||
+          editingQuadruple.opinionEnd == null
+          ? null
+          : {
+              text: editingQuadruple.opinionTerm,
+              start: editingQuadruple.opinionStart,
+              end: editingQuadruple.opinionEnd,
+            }
+      );
+      setCategory({ id: editingQuadruple.categoryId, name: editingQuadruple.categoryName });
+      setSentiment(editingQuadruple.sentiment);
+      setHighlightTarget("aspect");
+      setError(null);
+    } else {
+      resetForm();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editingQuadruple]);
 
   function handleTextSelect(span: TextSpan) {
     if (highlightTarget === "aspect") {
@@ -72,7 +127,7 @@ export function QuadrupleForm({
     setError(null);
   }
 
-  async function handleSubmit() {
+  function handleSubmit() {
     setError(null);
 
     const aspectTerm = aspectImplicit ? "NULL" : (aspectSpan?.text ?? "");
@@ -95,37 +150,26 @@ export function QuadrupleForm({
       return;
     }
 
-    setSubmitting(true);
-    try {
-      const body = {
-        aspect_term: aspectTerm,
-        aspect_implicit: aspectImplicit,
-        aspect_start: aspectImplicit ? null : (aspectSpan?.start ?? null),
-        aspect_end: aspectImplicit ? null : (aspectSpan?.end ?? null),
-        category_id: category.id,
-        opinion_term: opinionTerm,
-        opinion_implicit: opinionImplicit,
-        opinion_start: opinionImplicit ? null : (opinionSpan?.start ?? null),
-        opinion_end: opinionImplicit ? null : (opinionSpan?.end ?? null),
-        sentiment,
-      };
+    const annotation: LocalAnnotation = {
+      localId: editingQuadruple?.localId ?? crypto.randomUUID(),
+      aspectTerm,
+      aspectImplicit,
+      aspectStart: aspectImplicit ? null : (aspectSpan?.start ?? null),
+      aspectEnd: aspectImplicit ? null : (aspectSpan?.end ?? null),
+      opinionTerm,
+      opinionImplicit,
+      opinionStart: opinionImplicit ? null : (opinionSpan?.start ?? null),
+      opinionEnd: opinionImplicit ? null : (opinionSpan?.end ?? null),
+      categoryId: category.id,
+      categoryName: category.name,
+      sentiment,
+    };
 
-      const res = await api.post<CreateQuadrupleResponse>(
-        `/projects/${projectId}/rows/${rowId}/quadruples`,
-        body
-      );
-      onAdd(res.data);
+    if (isEditing) {
+      onUpdate(annotation);
+    } else {
+      onAdd(annotation);
       resetForm();
-    } catch (err: unknown) {
-      if (err instanceof Error && err.message.includes("404")) {
-        setError(
-          "Endpoint not found (404). The annotation API may not be available yet — please wait for the backend to be deployed."
-        );
-      } else {
-        setError(err instanceof Error ? err.message : "Failed to add quadruple.");
-      }
-    } finally {
-      setSubmitting(false);
     }
   }
 
@@ -140,7 +184,20 @@ export function QuadrupleForm({
       onSubmit={(e) => e.preventDefault()}
       className="space-y-5 rounded-xl border border-gray-200 bg-white p-5"
     >
-      <h3 className="text-sm font-semibold text-gray-900">Add quadruple</h3>
+      <div className="flex items-center justify-between">
+        <h3 className="text-sm font-semibold text-gray-900">
+          {isEditing ? "Edit annotation" : "New annotation"}
+        </h3>
+        {isEditing && (
+          <button
+            type="button"
+            onClick={onCancelEdit}
+            className="text-xs text-gray-400 hover:text-gray-600"
+          >
+            Cancel edit
+          </button>
+        )}
+      </div>
 
       {/* Text highlighter — shared for aspect and opinion */}
       <div className="space-y-2">
@@ -163,7 +220,7 @@ export function QuadrupleForm({
             disabled={opinionImplicit}
             className={`rounded-md px-3 py-1.5 text-xs font-medium transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${
               highlightTarget === "opinion"
-                ? "bg-green-100 text-green-800 ring-1 ring-green-300"
+                ? "bg-emerald-100 text-emerald-800 ring-1 ring-emerald-300"
                 : "bg-gray-100 text-gray-600 hover:bg-gray-200"
             }`}
           >
@@ -202,7 +259,6 @@ export function QuadrupleForm({
                 setAspectImplicit(e.target.checked);
                 if (e.target.checked) {
                   setAspectSpan(null);
-                  // Switch highlight target away so the user isn't stuck on a disabled field
                   setHighlightTarget("opinion");
                 }
               }}
@@ -233,7 +289,7 @@ export function QuadrupleForm({
           <span
             className={`flex-1 rounded-lg border px-3 py-2 text-sm ${
               opinionSpan && !opinionImplicit
-                ? "border-green-200 bg-green-50 text-green-900"
+                ? "border-emerald-200 bg-emerald-50 text-emerald-900"
                 : "border-gray-200 bg-gray-50 text-gray-400"
             }`}
           >
@@ -251,7 +307,6 @@ export function QuadrupleForm({
                 setOpinionImplicit(e.target.checked);
                 if (e.target.checked) {
                   setOpinionSpan(null);
-                  // Switch highlight target away so the user isn't stuck on a disabled field
                   setHighlightTarget("aspect");
                 }
               }}
@@ -275,9 +330,9 @@ export function QuadrupleForm({
       {/* Sentiment */}
       <div className="space-y-1.5">
         <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">Sentiment</p>
-        <div className="flex gap-3 flex-wrap">
+        <div className="flex flex-wrap gap-4">
           {SENTIMENTS.map(({ value, label, color }) => (
-            <label key={value} className="flex items-center gap-1.5 cursor-pointer select-none">
+            <label key={value} className="flex items-center gap-1.5 cursor-pointer">
               <input
                 type="radio"
                 name="sentiment"
@@ -297,11 +352,11 @@ export function QuadrupleForm({
       <div className="flex gap-3">
         <button
           type="button"
-          onClick={() => void handleSubmit()}
-          disabled={!isValid || submitting}
+          onClick={handleSubmit}
+          disabled={!isValid}
           className="rounded-lg bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-700 disabled:opacity-40 disabled:cursor-not-allowed"
         >
-          {submitting ? "Adding..." : "Add quadruple"}
+          {isEditing ? "Save changes" : "+ Add annotation"}
         </button>
         <button
           type="button"
