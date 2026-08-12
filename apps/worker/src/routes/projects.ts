@@ -295,6 +295,51 @@ projectRoutes.post(
   }
 );
 
+// DELETE /projects/:projectId/dataset
+projectRoutes.delete("/:projectId/dataset", zValidator("param", ProjectParamsSchema), async (c) => {
+  const { projectId } = c.req.valid("param");
+  const session = c.get("session");
+  const db = createDb(c.env);
+
+  // 1. Verify project belongs to user
+  const [existing] = await db
+    .select({ id: projects.id })
+    .from(projects)
+    .where(
+      and(
+        eq(projects.id, projectId),
+        eq(projects.user_id, session.user_id),
+        isNull(projects.deleted_at)
+      )
+    );
+
+  if (!existing) return c.json({ error: "Not found" }, 404);
+
+  // 2. Delete CSV from R2
+  await c.env.BUCKET.delete(`projects/${projectId}/data.csv`);
+
+  // 3. Delete all annotations for this project
+  await db.delete(annotations).where(eq(annotations.project_id, projectId));
+
+  // 4. Reset dataset fields on the project
+  const now = new Date().toISOString();
+  await db
+    .update(projects)
+    .set({
+      file_name: "",
+      file_size: 0,
+      total_rows: 0,
+      text_column: "",
+      annotation_queue: null,
+      updated_at: now,
+    })
+    .where(eq(projects.id, projectId));
+
+  // 5. Return updated project
+  const [updated] = await db.select().from(projects).where(eq(projects.id, projectId));
+  return c.json({ data: updated });
+});
+
 // Mount sub-routers inside projectRoutes so all /projects/* paths are resolved
 // by a single top-level app.route("/projects", projectRoutes) call.
 // Hono strips only static prefixes in app.route(); mounting here lets Hono
