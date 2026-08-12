@@ -1,6 +1,6 @@
 import { api } from "@/lib/api.ts";
 import type { Category } from "@acostator/shared";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 interface CategoryOption {
   id: string;
@@ -23,41 +23,31 @@ interface CategoryPickerProps {
 
 /**
  * Searchable dropdown for categories.
- * Fetches GET /projects/:projectId/categories?q=<query>
+ * Fetches GET /projects/:projectId/categories once on mount, then filters locally.
  * Shows matches + "Create new" option.
  */
 export function CategoryPicker({ projectId, value, onChange }: CategoryPickerProps) {
   const [query, setQuery] = useState("");
-  const [options, setOptions] = useState<Category[]>([]);
+  const [allCategories, setAllCategories] = useState<Category[]>([]);
   const [open, setOpen] = useState(false);
-  const [loading, setLoading] = useState(false);
+  const [loadingAll, setLoadingAll] = useState(false);
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
-  const fetchCategories = useCallback(
-    (q: string) => {
-      setLoading(true);
-      setError(null);
-      const encoded = encodeURIComponent(q);
-      api
-        .get<CategoriesResponse>(`/projects/${projectId}/categories?q=${encoded}`)
-        .then((res) => setOptions(res.data))
-        .catch((err: unknown) =>
-          setError(err instanceof Error ? err.message : "Failed to load categories")
-        )
-        .finally(() => setLoading(false));
-    },
-    [projectId]
-  );
-
-  // Debounced search
+  // Fetch all categories once on mount — no further API calls for search
   useEffect(() => {
-    if (!open) return;
-    const timer = setTimeout(() => fetchCategories(query), 250);
-    return () => clearTimeout(timer);
-  }, [query, open, fetchCategories]);
+    setLoadingAll(true);
+    setError(null);
+    api
+      .get<CategoriesResponse>(`/projects/${projectId}/categories`)
+      .then((res) => setAllCategories(res.data))
+      .catch((err: unknown) =>
+        setError(err instanceof Error ? err.message : "Failed to load categories")
+      )
+      .finally(() => setLoadingAll(false));
+  }, [projectId]);
 
   // Close on outside click
   useEffect(() => {
@@ -70,9 +60,13 @@ export function CategoryPicker({ projectId, value, onChange }: CategoryPickerPro
     return () => document.removeEventListener("mousedown", handleClick);
   }, []);
 
+  // Local filter — zero API calls on search
+  const options = allCategories.filter((c) =>
+    c.name.toLowerCase().includes(query.toLowerCase())
+  );
+
   function handleOpen() {
     setOpen(true);
-    fetchCategories(query);
     setTimeout(() => inputRef.current?.focus(), 0);
   }
 
@@ -91,6 +85,7 @@ export function CategoryPicker({ projectId, value, onChange }: CategoryPickerPro
       const res = await api.post<CreateCategoryResponse>(`/projects/${projectId}/categories`, {
         name,
       });
+      setAllCategories((prev) => [...prev, res.data]);
       onChange({ id: res.data.id, name: res.data.name });
       setOpen(false);
       setQuery("");
@@ -146,9 +141,9 @@ export function CategoryPicker({ projectId, value, onChange }: CategoryPickerPro
           {error && <p className="px-3 py-2 text-xs text-red-500">{error}</p>}
 
           <ul aria-label="Category options" className="max-h-48 overflow-y-auto py-1">
-            {loading && <li className="px-3 py-2 text-xs text-gray-400">Loading...</li>}
+            {loadingAll && <li className="px-3 py-2 text-xs text-gray-400">Loading...</li>}
 
-            {!loading && options.length === 0 && !showCreate && (
+            {!loadingAll && options.length === 0 && !showCreate && (
               <li className="px-3 py-2 text-xs text-gray-400">
                 {trimmedQuery ? "No matches found." : "Start typing to search."}
               </li>
