@@ -17,14 +17,14 @@ export interface AnnotationColor {
 
 /** Rotating palette — up to 8 distinct colors per row. */
 export const ANNOTATION_COLORS: AnnotationColor[] = [
-  { mark: "bg-blue-200 text-blue-900", dot: "bg-blue-400", border: "border-blue-300" },
-  { mark: "bg-emerald-200 text-emerald-900", dot: "bg-emerald-400", border: "border-emerald-300" },
   { mark: "bg-orange-200 text-orange-900", dot: "bg-orange-400", border: "border-orange-300" },
   { mark: "bg-violet-200 text-violet-900", dot: "bg-violet-400", border: "border-violet-300" },
   { mark: "bg-rose-200 text-rose-900", dot: "bg-rose-400", border: "border-rose-300" },
   { mark: "bg-cyan-200 text-cyan-900", dot: "bg-cyan-400", border: "border-cyan-300" },
   { mark: "bg-amber-200 text-amber-900", dot: "bg-amber-400", border: "border-amber-300" },
   { mark: "bg-pink-200 text-pink-900", dot: "bg-pink-400", border: "border-pink-300" },
+  { mark: "bg-blue-200 text-blue-900", dot: "bg-blue-400", border: "border-blue-300" },
+  { mark: "bg-emerald-200 text-emerald-900", dot: "bg-emerald-400", border: "border-emerald-300" },
 ];
 
 export function getAnnotationColor(index: number): AnnotationColor {
