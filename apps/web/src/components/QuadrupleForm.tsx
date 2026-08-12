@@ -46,7 +46,6 @@ const SENTIMENTS: { value: Sentiment; label: string; color: string }[] = [
   { value: "positive", label: "Positive", color: "text-green-700" },
   { value: "neutral", label: "Neutral", color: "text-gray-600" },
   { value: "negative", label: "Negative", color: "text-red-700" },
-  { value: "mixed", label: "Mixed", color: "text-yellow-700" },
 ];
 
 /**
@@ -315,33 +314,14 @@ export function QuadrupleForm({
             <div className="flex items-center gap-3">
               <span
                 className={`flex-1 rounded-lg border px-3 py-2 text-sm ${
-                  opinionSpan && !opinionImplicit
+                  opinionSpan
                     ? "border-emerald-200 bg-emerald-50 text-emerald-900"
                     : "border-gray-200 bg-gray-50 text-gray-400"
                 }`}
               >
-                {opinionImplicit
-                  ? "Implicit"
-                  : opinionSpan
-                    ? opinionSpan.text
-                    : "Highlight text above..."}
+                {opinionSpan ? opinionSpan.text : "Highlight text above..."}
               </span>
-              <label className="flex items-center gap-1.5 text-xs text-gray-500 cursor-pointer select-none">
-                <input
-                  type="checkbox"
-                  checked={opinionImplicit}
-                  onChange={(e) => {
-                    setOpinionImplicit(e.target.checked);
-                    if (e.target.checked) {
-                      setOpinionSpan(null);
-                      setHighlightTarget("aspect");
-                    }
-                  }}
-                  className="rounded"
-                />
-                Implicit
-              </label>
-              {opinionSpan && !opinionImplicit && (
+              {opinionSpan && (
                 <button
                   type="button"
                   onClick={() => setOpinionSpan(null)}
