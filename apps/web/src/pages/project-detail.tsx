@@ -1,4 +1,6 @@
 import { api } from "@/lib/api.ts";
+import { clearProjectData } from "@/lib/indexeddb.ts";
+import { UploadCSVModal } from "@/components/UploadCSVModal.tsx";
 import type { AnnotationOrder, Project } from "@acostator/shared";
 import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
@@ -20,6 +22,14 @@ export function ProjectDetailPage() {
     type: "success" | "error";
     message: string;
   } | null>(null);
+
+  // Delete dataset state
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+
+  // Replace dataset state
+  const [showReplaceModal, setShowReplaceModal] = useState(false);
 
   useEffect(() => {
     if (!projectId) return;
@@ -51,6 +61,22 @@ export function ProjectDetailPage() {
       });
     } finally {
       setOrderSaving(false);
+    }
+  };
+
+  const handleDeleteDataset = async () => {
+    if (!project || deleting) return;
+    setDeleting(true);
+    setDeleteError(null);
+    try {
+      const res = await api.delete<ProjectResponse>(`/projects/${project.id}/dataset`);
+      await clearProjectData(project.id);
+      setProject(res.data);
+      setShowDeleteConfirm(false);
+    } catch (err) {
+      setDeleteError(err instanceof Error ? err.message : "Failed to delete dataset");
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -156,8 +182,95 @@ export function ProjectDetailPage() {
               </p>
             )}
           </div>
+
+          {/* Replace Dataset */}
+          <div className="px-4 py-4">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <p className="text-sm font-medium text-gray-900">Replace dataset</p>
+                <p className="mt-0.5 text-sm text-gray-500">
+                  Upload a new CSV to replace the current dataset. All existing annotations will be
+                  cleared.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowReplaceModal(true)}
+                className="flex-shrink-0 rounded-lg border border-gray-200 px-3 py-1.5 text-sm hover:bg-gray-50"
+              >
+                Replace dataset
+              </button>
+            </div>
+          </div>
+
+          {/* Delete Dataset */}
+          <div className="px-4 py-4">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <p className="text-sm font-medium text-gray-900">Delete dataset</p>
+                <p className="mt-0.5 text-sm text-gray-500">
+                  Remove the CSV and all annotations from this project.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setDeleteError(null);
+                  setShowDeleteConfirm(true);
+                }}
+                disabled={!project.file_name}
+                className="flex-shrink-0 rounded-lg border border-red-200 px-3 py-1.5 text-sm text-red-600 hover:bg-red-50 disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                Delete dataset
+              </button>
+            </div>
+
+            {/* Inline confirmation */}
+            {showDeleteConfirm && (
+              <div className="mt-3 rounded-lg border border-red-100 bg-red-50 p-3">
+                <p className="text-sm text-red-800">
+                  This will delete your CSV and all annotations. This cannot be undone.
+                </p>
+                {deleteError && (
+                  <p className="mt-1 text-sm text-red-600">{deleteError}</p>
+                )}
+                <div className="mt-3 flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => void handleDeleteDataset()}
+                    disabled={deleting}
+                    className="rounded-lg bg-red-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-red-700 disabled:opacity-50"
+                  >
+                    {deleting ? "Deleting…" : "Yes, delete"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setShowDeleteConfirm(false)}
+                    disabled={deleting}
+                    className="rounded-lg border border-gray-200 px-3 py-1.5 text-sm hover:bg-gray-50 disabled:opacity-50"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
         </div>
       </section>
+
+      {/* Replace dataset modal */}
+      {showReplaceModal && (
+        <UploadCSVModal
+          projectId={project.id}
+          onClose={() => setShowReplaceModal(false)}
+          onUploaded={async () => {
+            await clearProjectData(project.id);
+            const res = await api.get<ProjectResponse>(`/projects/${project.id}`);
+            setProject(res.data);
+            setShowReplaceModal(false);
+          }}
+        />
+      )}
     </div>
   );
 }
