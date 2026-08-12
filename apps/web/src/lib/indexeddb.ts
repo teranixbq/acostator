@@ -281,3 +281,26 @@ export async function deleteLocalAnnotation(projectId: string, localId: string):
   });
   db.close();
 }
+
+/**
+ * Clear all data for a project from IndexedDB — all stores are wiped.
+ * Call this after a dataset is deleted or replaced so stale local data is gone.
+ */
+export async function clearProjectData(projectId: string): Promise<void> {
+  const db = await openDB(projectId);
+  await new Promise<void>((resolve, reject) => {
+    const stores = ["csv_rows", "progress", "statuses", "annotations"] as const;
+    const tx = db.transaction(stores, "readwrite");
+    for (const store of stores) {
+      tx.objectStore(store).clear();
+    }
+    tx.oncomplete = () => {
+      db.close();
+      resolve();
+    };
+    tx.onerror = () => {
+      db.close();
+      reject(tx.error);
+    };
+  });
+}
