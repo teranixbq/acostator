@@ -1,6 +1,6 @@
+import { UploadCSVModal } from "@/components/UploadCSVModal.tsx";
 import { api } from "@/lib/api.ts";
 import { clearProjectData } from "@/lib/indexeddb.ts";
-import { UploadCSVModal } from "@/components/UploadCSVModal.tsx";
 import type { AnnotationOrder, Project } from "@acostator/shared";
 import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
@@ -231,9 +231,7 @@ export function ProjectDetailPage() {
                 <p className="text-sm text-red-800">
                   This will delete your CSV and all annotations. This cannot be undone.
                 </p>
-                {deleteError && (
-                  <p className="mt-1 text-sm text-red-600">{deleteError}</p>
-                )}
+                {deleteError && <p className="mt-1 text-sm text-red-600">{deleteError}</p>}
                 <div className="mt-3 flex gap-2">
                   <button
                     type="button"
