@@ -526,23 +526,27 @@ export function AnnotatePage() {
 
   // Build Quadruple[] from pendingAnnotations so TextHighlighter can render
   // existing span highlights for the current row.
-  const noServerQuadruples: Quadruple[] = pendingAnnotations.map((a) => ({
-    id: a.localId,
-    row_id: "",
-    project_id: projectId ?? "",
-    aspect_term: a.aspectTerm,
-    aspect_implicit: a.aspectImplicit,
-    aspect_start: a.aspectStart,
-    aspect_end: a.aspectEnd,
-    category_id: a.categoryId,
-    opinion_term: a.opinionTerm,
-    opinion_implicit: a.opinionImplicit,
-    opinion_start: a.opinionStart,
-    opinion_end: a.opinionEnd,
-    sentiment: a.sentiment,
-    created_at: "",
-    updated_at: "",
-  }));
+  // Exclude the annotation currently being edited — its spans are rendered
+  // via the form's own aspectSpan/opinionSpan active selection state.
+  const noServerQuadruples: Quadruple[] = pendingAnnotations
+    .filter((a) => a.localId !== editingAnnotation?.localId)
+    .map((a) => ({
+      id: a.localId,
+      row_id: "",
+      project_id: projectId ?? "",
+      aspect_term: a.aspectTerm,
+      aspect_implicit: a.aspectImplicit,
+      aspect_start: a.aspectStart,
+      aspect_end: a.aspectEnd,
+      category_id: a.categoryId,
+      opinion_term: a.opinionTerm,
+      opinion_implicit: a.opinionImplicit,
+      opinion_start: a.opinionStart,
+      opinion_end: a.opinionEnd,
+      sentiment: a.sentiment,
+      created_at: "",
+      updated_at: "",
+    }));
 
   // -------------------------------------------------------------------------
   // Render states
