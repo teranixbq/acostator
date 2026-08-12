@@ -61,9 +61,7 @@ export function CategoryPicker({ projectId, value, onChange }: CategoryPickerPro
   }, []);
 
   // Local filter — zero API calls on search
-  const options = allCategories.filter((c) =>
-    c.name.toLowerCase().includes(query.toLowerCase())
-  );
+  const options = allCategories.filter((c) => c.name.toLowerCase().includes(query.toLowerCase()));
 
   function handleOpen() {
     setOpen(true);
