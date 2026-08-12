@@ -1,7 +1,7 @@
 import { env } from "cloudflare:test";
 import { describe, expect, it } from "vitest";
 import app from "../index.ts";
-import { makeSessionCookie, req, seedProject, seedRow, seedUser } from "./helpers.ts";
+import { makeSessionCookie, req, seedAnnotation, seedProject, seedUser } from "./helpers.ts";
 
 // ---------------------------------------------------------------------------
 // GET /projects
@@ -54,9 +54,8 @@ describe("GET /projects", () => {
   it("includes annotated_rows count", async () => {
     const userId = await seedUser(env);
     const projectId = await seedProject(env, { user_id: userId, total_rows: 3 });
-    await seedRow(env, { project_id: projectId, row_index: 0, status: "completed" });
-    await seedRow(env, { project_id: projectId, row_index: 1, status: "completed" });
-    await seedRow(env, { project_id: projectId, row_index: 2, status: "pending" });
+    await seedAnnotation(env, { project_id: projectId, row_index: 0 });
+    await seedAnnotation(env, { project_id: projectId, row_index: 1 });
 
     const cookie = await makeSessionCookie(userId);
     const res = await app.fetch(req("GET", "/projects", { cookie }), env);
@@ -154,8 +153,7 @@ describe("GET /projects/:projectId", () => {
       name: "Detail Test",
       total_rows: 2,
     });
-    await seedRow(env, { project_id: projectId, row_index: 0, status: "completed" });
-    await seedRow(env, { project_id: projectId, row_index: 1, status: "pending" });
+    await seedAnnotation(env, { project_id: projectId, row_index: 0 });
 
     const cookie = await makeSessionCookie(userId);
     const res = await app.fetch(req("GET", `/projects/${projectId}`, { cookie }), env);

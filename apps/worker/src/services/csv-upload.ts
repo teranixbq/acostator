@@ -1,5 +1,5 @@
 import { eq } from "drizzle-orm";
-import { projects } from "../db/schema.ts";
+import { annotations, projects } from "../db/schema.ts";
 import type { AppDb } from "../lib/db.ts";
 import type { Env } from "../lib/db.ts";
 
@@ -131,16 +131,20 @@ export async function completeUpload(
   // Count data rows (everything after the header)
   const totalRows = lines.length - 1;
 
-  // --- 5. Copy CSV to permanent project key in R2 ---
+  // --- 5. Clear existing annotations and reset queue (replace-dataset flow) ---
+  await db.delete(annotations).where(eq(annotations.project_id, projectId));
+  await db.update(projects).set({ annotation_queue: null }).where(eq(projects.id, projectId));
+
+  // --- 6. Copy CSV to permanent project key in R2 ---
   // Key: projects/{projectId}/data.csv — stable URL for GET /projects/:id/csv
   await env.BUCKET.put(`projects/${projectId}/data.csv`, csvText, {
     httpMetadata: { contentType: "text/csv" },
   });
 
-  // --- 6. Delete temp upload artefacts ---
+  // --- 7. Delete temp upload artefacts ---
   await cleanupR2Temp(env, projectId, uploadId);
 
-  // --- 7. Update project record ---
+  // --- 8. Update project record ---
   await db
     .update(projects)
     .set({
