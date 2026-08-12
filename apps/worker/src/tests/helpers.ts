@@ -210,6 +210,42 @@ export async function seedQuadruple(env: TestEnv, opts: SeedQuadrupleOptions) {
 }
 
 // ---------------------------------------------------------------------------
+// Annotation helpers
+// ---------------------------------------------------------------------------
+
+export interface SeedAnnotationOptions {
+  id?: string;
+  project_id: string;
+  row_index: number;
+  aspect?: string;
+  category?: string;
+  opinion?: string;
+  sentiment?: "positive" | "negative" | "neutral" | "mixed";
+  status?: "draft" | "completed";
+}
+
+export async function seedAnnotation(env: TestEnv, opts: SeedAnnotationOptions) {
+  const db = drizzle(env.DB, { schema });
+  const id = opts.id ?? crypto.randomUUID();
+  const now = new Date().toISOString();
+
+  await db.insert(schema.annotations).values({
+    id,
+    project_id: opts.project_id,
+    row_index: opts.row_index,
+    aspect: opts.aspect ?? `aspect_${opts.row_index}`,
+    category: opts.category ?? "GENERAL",
+    opinion: opts.opinion ?? "good",
+    sentiment: opts.sentiment ?? "positive",
+    status: opts.status ?? "completed",
+    created_at: now,
+    updated_at: now,
+  });
+
+  return id;
+}
+
+// ---------------------------------------------------------------------------
 // Request factory
 // ---------------------------------------------------------------------------
 
