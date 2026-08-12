@@ -648,7 +648,7 @@ export function AnnotatePage() {
               return (
                 <li
                   key={a.localId}
-                  className={`rounded-lg border px-4 py-3 text-sm ${color.border} bg-white ${
+                  className={`rounded-lg border px-4 py-3 text-sm border-gray-200 bg-white ${
                     isBeingEdited ? "ring-2 ring-offset-1 ring-gray-400" : ""
                   }`}
                 >
